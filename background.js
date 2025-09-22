@@ -14,15 +14,6 @@ chrome.runtime.onInstalled.addListener(() => {
     for (const k in defaults) {
       if (!(k in items)) toSet[k] = defaults[k];
     }
-
-    // Try to fetch signed-in Chrome/Workspace email
-    chrome.identity.getProfileUserInfo((info) => {
-      if (info && info.email) {
-        toSet.userEmail = info.email;
-      }
-      if (Object.keys(toSet).length > 0) {
-        chrome.storage.local.set(toSet);
-      }
     });
   });
 });
