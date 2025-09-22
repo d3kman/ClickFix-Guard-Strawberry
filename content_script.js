@@ -242,6 +242,20 @@
     const box = document.createElement("div");
     box.className = "cg-box";
 
+        // Report button row
+    const reportRow = document.createElement("div");
+    reportRow.className = "cg-report-row";
+
+    const reportBtn = document.createElement("button");
+    reportBtn.className = "cg-btn-report";
+    reportBtn.textContent = "Report ClickFix";
+    reportBtn.onclick = () => {
+      generateReport(text, host);
+    };
+
+    reportRow.appendChild(reportBtn);
+    box.appendChild(reportRow);
+
     const title = document.createElement("div");
     title.className = "cg-title";
     title.textContent = "⚠ Suspicious Clipboard Detected";
@@ -334,4 +348,38 @@ info.innerHTML = `
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
   }
+    function generateReport(text, host) {
+    const now = new Date().toISOString();
+    const url = location.href;
+    const ua = navigator.userAgent;
+    const platform = navigator.platform;
+
+    chrome.storage.local.get({ userEmail: "unknown@example.com" }, (cfg) => {
+      const report = [
+        "=== ClickFix Report ===",
+        `Timestamp: ${now}`,
+        `URL: ${url}`,
+        `Source Host: ${host}`,
+        `Detected Clipboard Payload:`,
+        text,
+        "",
+        `User Email: ${cfg.userEmail}`,
+        `Browser/OS: ${ua} (${platform})`,
+        "========================"
+      ].join("\n");
+
+      const blob = new Blob([report], { type: "text/plain" });
+      const urlObj = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = urlObj;
+      a.download = "ClickFix-Report-List.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(urlObj);
+    });
+  }
+
+  
 })();
