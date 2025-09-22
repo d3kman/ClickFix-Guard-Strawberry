@@ -242,20 +242,6 @@
     const box = document.createElement("div");
     box.className = "cg-box";
 
-        // Report button row
-    const reportRow = document.createElement("div");
-    reportRow.className = "cg-report-row";
-
-    const reportBtn = document.createElement("button");
-    reportBtn.className = "cg-btn-report";
-    reportBtn.textContent = "Report ClickFix";
-    reportBtn.onclick = () => {
-      generateReport(text, host);
-    };
-
-    reportRow.appendChild(reportBtn);
-    box.appendChild(reportRow);
-
     const title = document.createElement("div");
     title.className = "cg-title";
     title.textContent = "⚠ Suspicious Clipboard Detected";
@@ -263,65 +249,75 @@
 
     const info = document.createElement("div");
     info.className = "cg-info";
-info.innerHTML = `
-  <div class="cg-source"><strong>Source:</strong> ${escapeHtml(host)}</div>
-  <div><strong>Detected payload:</strong></div>
-  <pre>${escapeHtml(text)}</pre>`;
+    info.innerHTML = `
+      <div class="cg-source"><strong>Source:</strong> ${escapeHtml(host)}</div>
+      <div><strong>Detected payload:</strong></div>
+      <pre>${escapeHtml(text)}</pre>`;
     box.appendChild(info);
 
     const btnRow = document.createElement("div");
     btnRow.className = "cg-btn-row";
 
+    // Report button (bottom-left)
+    const reportBtn = document.createElement("button");
+    reportBtn.className = "cg-btn-report";
+    reportBtn.textContent = "Report ClickFix";
+    reportBtn.onclick = () => {
+      generateReport(text, host);
+    };
+    btnRow.appendChild(reportBtn);
+
+    const spacer = document.createElement("div");
+    spacer.style.flex = "1";
+    btnRow.appendChild(spacer);
+
     const whitelistBtn = document.createElement("button");
     whitelistBtn.className = "cg-btn-whitelist";
     whitelistBtn.textContent = "Whitelist this site";
     whitelistBtn.onclick = () => {
-    // Prevent duplicates
+      // Prevent duplicates
       if (document.querySelector(".cg-confirm-overlay")) return;
 
       const confirmBox = document.createElement("div");
       confirmBox.className = "cg-confirm-overlay";
 
-        confirmBox.innerHTML = `
-          <div class="cg-confirm-box">
-              <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
-              <div class="cg-confirm-text">
-                  Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
-                  This site may attempt to inject malicious clipboard payloads that could infect your computer.
-              </div>
-              <div class="cg-confirm-btns">
-              <button class="cg-btn-yes">Yes, continue</button>
-              <button class="cg-btn-no">Cancel</button>
-              </div>
-          </div>`;
+      confirmBox.innerHTML = `
+        <div class="cg-confirm-box">
+            <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
+            <div class="cg-confirm-text">
+                Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
+                This site may attempt to inject malicious clipboard payloads that could infect your computer.
+            </div>
+            <div class="cg-confirm-btns">
+            <button class="cg-btn-yes">Yes, continue</button>
+            <button class="cg-btn-no">Cancel</button>
+            </div>
+        </div>`;
 
-        document.body.appendChild(confirmBox);
+      document.body.appendChild(confirmBox);
 
-          // Yes → whitelist + close both
-        confirmBox.querySelector(".cg-btn-yes").onclick = () => {
+      // Yes → whitelist + close both
+      confirmBox.querySelector(".cg-btn-yes").onclick = () => {
         chrome.storage.local.get({ whitelist: [] }, (d) => {
           const wl = d.whitelist || [];
           if (!wl.includes(host)) {
-        wl.push(host);
-        chrome.storage.local.set({ whitelist: wl }, () => {
-          whitelistBtn.textContent = "Whitelisted ✓";
-          whitelistBtn.disabled = true;
+            wl.push(host);
+            chrome.storage.local.set({ whitelist: wl }, () => {
+              whitelistBtn.textContent = "Whitelisted ✓";
+              whitelistBtn.disabled = true;
+            });
+          }
         });
-      }
-    });
 
-    confirmBox.remove();
-    const mainAlert = document.querySelector(".cg-center-overlay");
-    if (mainAlert) mainAlert.remove();
-  };
+        confirmBox.remove();
+        overlay.remove();
+      };
 
-  // No → just close confirm, keep warning open
-  confirmBox.querySelector(".cg-btn-no").onclick = () => {
-    confirmBox.remove();
-  };
-};
-
-
+      // No → just close confirm
+      confirmBox.querySelector(".cg-btn-no").onclick = () => {
+        confirmBox.remove();
+      };
+    };
 
     const dismiss = document.createElement("button");
     dismiss.className = "cg-btn-dismiss";
@@ -330,8 +326,8 @@ info.innerHTML = `
 
     btnRow.appendChild(whitelistBtn);
     btnRow.appendChild(dismiss);
-    box.appendChild(btnRow);
 
+    box.appendChild(btnRow);
     overlay.appendChild(box);
     document.documentElement.appendChild(overlay);
 
