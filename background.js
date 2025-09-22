@@ -1,26 +1,32 @@
 // background.js
-// Handles incoming suspiciousClipboard messages, notifications, log storage and default settings.
-
 chrome.runtime.onInstalled.addListener(() => {
   // Initialize defaults
   chrome.storage.local.get(null, (items) => {
     const defaults = {
-      whitelist: [], // hostnames like "example.com"
+      whitelist: [],
       logs: [],
-      keywords: [], // user can add custom keywords in popup
-      onScreenAlerts: true // default: show modal alerts
+      keywords: [],
+      onScreenAlerts: true,
+      userEmail: "unknown@example.com" // fallback
     };
 
-    // Only set defaults for keys not already present
     const toSet = {};
     for (const k in defaults) {
       if (!(k in items)) toSet[k] = defaults[k];
     }
-    if (Object.keys(toSet).length > 0) {
-      chrome.storage.local.set(toSet);
-    }
+
+    // Try to fetch signed-in Chrome/Workspace email
+    chrome.identity.getProfileUserInfo((info) => {
+      if (info && info.email) {
+        toSet.userEmail = info.email;
+      }
+      if (Object.keys(toSet).length > 0) {
+        chrome.storage.local.set(toSet);
+      }
+    });
   });
 });
+
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg && msg.type === "suspiciousClipboard") {
