@@ -168,3 +168,16 @@
   cursor: pointer;
 }
 .cg-btn-no:hover { background: #cacaca; }
+
+.cg-btn-download {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cg-btn-download:hover {
+  background: #0069d9;
+}
+
