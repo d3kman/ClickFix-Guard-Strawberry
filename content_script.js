@@ -261,7 +261,7 @@
     // Report button (bottom-left)
     const reportBtn = document.createElement("button");
     reportBtn.className = "cg-btn-report";
-    reportBtn.textContent = "Report ClickFix";
+    reportBtn.textContent = "Report to Security Team";
     reportBtn.onclick = () => {
       generateReport(text, host);
     };
