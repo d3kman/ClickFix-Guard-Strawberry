@@ -1,29 +1,28 @@
 // background.js
+// Handles suspiciousClipboard messages, notifications, log storage and default settings.
+
 chrome.runtime.onInstalled.addListener(() => {
-  // Initialize defaults
   chrome.storage.local.get(null, (items) => {
     const defaults = {
       whitelist: [],
       logs: [],
       keywords: [],
-      onScreenAlerts: true,
-      userEmail: "unknown@example.com" // fallback
+      onScreenAlerts: true
     };
-
     const toSet = {};
     for (const k in defaults) {
       if (!(k in items)) toSet[k] = defaults[k];
     }
-    });
+    if (Object.keys(toSet).length > 0) {
+      chrome.storage.local.set(toSet);
+    }
   });
 });
-
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg && msg.type === "suspiciousClipboard") {
     const origin = msg.origin || (sender && sender.url) || "unknown";
 
-    // Normalize origin to hostname if possible
     let host = origin;
     try {
       if (origin && origin.includes("://")) {
@@ -32,14 +31,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         host = new URL(sender.url).hostname;
       }
     } catch (e) {
-      host = origin; // fallback
+      host = origin;
     }
 
     chrome.storage.local.get({ whitelist: [], logs: [] }, (data) => {
-      if (data.whitelist.includes(host)) {
-        // whitelisted - ignore
-        return;
-      }
+      if (data.whitelist.includes(host)) return;
 
       const newLog = {
         text: msg.payload,
@@ -50,19 +46,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       const updatedLogs = [newLog, ...(data.logs || [])].slice(0, 50);
       chrome.storage.local.set({ logs: updatedLogs });
 
-      // Desktop notification
       chrome.notifications.create({
         type: "basic",
-        iconUrl: "warning.png",
+        iconUrl: "icons/icon48.png",
         title: "⚠ Suspicious Clipboard Activity",
         message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
       });
     });
   }
-});
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "downloadReport") {
+  // 🔹 Handle report download
+  if (msg && msg.type === "downloadReport") {
     chrome.downloads.download({
       url: msg.url,
       filename: msg.filename,
@@ -71,9 +65,8 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-
-// small helper
 function truncate(s, n) {
   if (!s) return "";
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
+
