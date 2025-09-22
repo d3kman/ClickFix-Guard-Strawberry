@@ -5,101 +5,10 @@
 
 (function () {
   // --- Inject a hook script into the page context ---
-  const pageHookCode = `(() => {
-    const origWrite = navigator.clipboard?.write?.bind(navigator.clipboard) || null;
-    const origWriteText = navigator.clipboard?.writeText?.bind(navigator.clipboard) || null;
-    const origExec = document.execCommand?.bind(document) || null;
-
-    function notify(obj) {
-      try {
-        window.postMessage({ __clipboardGuardFromPage: true, data: obj }, "*");
-      } catch (_) {}
-    }
-
-    if (origWrite) {
-      navigator.clipboard.write = async function (items) {
-        try {
-          let text = "";
-          if (Array.isArray(items)) {
-            for (const it of items) {
-              try {
-                if (it?.getType) {
-                  const blob = await it.getType("text/plain").catch(() => null);
-                  if (blob) text = text || await blob.text().catch(() => "");
-                }
-              } catch (_) {}
-            }
-          }
-          notify({ type: "write", text });
-        } catch (_) {}
-        return origWrite.apply(this, arguments);
-      };
-    }
-
-    if (origWriteText) {
-      navigator.clipboard.writeText = async function (text) {
-        try { notify({ type: "writeText", text: String(text) }); } catch(_) {}
-        return origWriteText.apply(this, arguments);
-      };
-    }
-
-    if (origExec) {
-      document.execCommand = function (cmd, ...args) {
-        try {
-          if (String(cmd).toLowerCase() === "copy") {
-            let captured = "";
-            try {
-              const sel = document.getSelection();
-              if (sel?.toString()) captured = sel.toString();
-              else if (document.activeElement) {
-                const ae = document.activeElement;
-                if (ae.value) captured = ae.value;
-                else if (ae.innerText) captured = ae.innerText;
-              }
-            } catch (_) {}
-            notify({ type: "execCopy", text: String(captured) });
-          }
-        } catch (_) {}
-        return origExec.apply(this, [cmd, ...args]);
-      };
-    }
-
-    try {
-      document.addEventListener("copy", (ev) => {
-        try {
-          let text = "";
-          if (ev?.clipboardData?.getData) {
-            text = ev.clipboardData.getData("text/plain") || "";
-          } else {
-            const sel = document.getSelection();
-            if (sel) text = sel.toString();
-          }
-          notify({ type: "copyEvent", text: String(text) });
-        } catch (_) {}
-      }, true);
-    } catch (_) {}
-
-    // NEW: Hook DataTransfer.prototype.setData (clipboardData.setData)
-    try {
-      const origSetData = DataTransfer.prototype.setData;
-      DataTransfer.prototype.setData = function(format, data) {
-        try {
-          if (format && format.toLowerCase() === "text/plain" && data) {
-            notify({ type: "setData", text: String(data) });
-          }
-        } catch (_) {}
-        return origSetData.apply(this, arguments);
-      };
-    } catch (_) {}
-
-    window.__clipboardGuardInjected = true;
-  })();`;
-
   const script = document.createElement("script");
   script.src = chrome.runtime.getURL("pageHook.js");
   (document.head || document.documentElement).appendChild(script);
   script.remove();
-
 
   // --- Listen for events posted from page ---
   window.addEventListener("message", (evt) => {
@@ -115,45 +24,23 @@
   const HTA_APPDATA_RE = /(%appdata%|\\appdata\\|%APPDATA%|\.hta)/i;
   const URL_THEN_CMD_RE = /https?:\/\/\S+.*(?:;|&&|\||\`|\$\(.*\)|start-process)\b/i;
 
-  // Hardcoded suspicious terms
   const HARDCODED_KEYWORDS = [
-    "verification",
-    "id",
-    "#",
-    "powershell",
-    "mshta.exe",
-    "-noprofile",
-    "-executionpolicy",
-    "-enc",
-    "invoke-expression",
-    "iex"
+    "verification","id","#","powershell","mshta.exe",
+    "-noprofile","-executionpolicy","-enc","invoke-expression","iex"
   ];
 
-  // Suspicious token list for chaining detection
   const TOKENS = [
-    "powershell",
-    "invoke-webrequest",
-    "start-process",
-    "mshta",
-    "cmd",
-    "wget",
-    "curl",
-    "bitsadmin",
-    "certutil",
-    "rundll32",
-    "iex",
-    "invoke-expression"
+    "powershell","invoke-webrequest","start-process","mshta","cmd",
+    "wget","curl","bitsadmin","certutil","rundll32","iex","invoke-expression"
   ];
 
   function forwardCandidate({ method, text }) {
     try {
       if (!text) {
-        // Still forward empty events for logging
         chrome.runtime.sendMessage({
           type: "clipboardCandidateRaw",
           origin: location.hostname || location.host || location.href,
-          method,
-          text: ""
+          method, text: ""
         });
         return;
       }
@@ -165,7 +52,6 @@
         const host = location.hostname || location.host || "unknown";
         if (cfg.whitelist.includes(host)) return;
 
-        // Apply detection heuristics
         if (
           MALICIOUS_RE.test(s) ||
           POWERSHELL_FLAGS_RE.test(s) ||
@@ -176,32 +62,27 @@
           return;
         }
 
-        // Suspicious token chaining: 2+ dangerous tokens together
         const matches = TOKENS.filter(t => s.includes(t));
         if (matches.length >= 2) {
           handleSuspicious(text, host);
           return;
         }
 
-        // Hardcoded suspicious terms
-        if (HARDCODED_KEYWORDS.some(k => k && s.includes(k.toLowerCase()))) {
+        if (HARDCODED_KEYWORDS.some(k => s.includes(k.toLowerCase()))) {
           handleSuspicious(text, host);
           return;
         }
 
-        // User-provided keywords
         if (Array.isArray(cfg.keywords) && cfg.keywords.some(k => k && s.includes(String(k).toLowerCase()))) {
           handleSuspicious(text, host);
           return;
         }
       });
 
-      // Always forward raw candidate for background logging
       chrome.runtime.sendMessage({
         type: "clipboardCandidateRaw",
         origin: location.hostname || location.host || location.href,
-        method,
-        text
+        method, text
       });
     } catch (e) {
       console.error("Clipboard Guard forwardCandidate error", e);
@@ -211,8 +92,7 @@
   function handleSuspicious(text, host) {
     chrome.runtime.sendMessage({
       type: "suspiciousClipboard",
-      payload: text,
-      origin: host
+      payload: text, origin: host
     });
 
     chrome.storage.local.get({ onScreenAlerts: true }, (cfg) => {
@@ -220,7 +100,7 @@
     });
   }
 
-  // --- Inject CSS for modal once ---
+  // --- Inject CSS once ---
   function injectModalCss() {
     if (document.getElementById("clipboard-guard-style")) return;
     const link = document.createElement("link");
@@ -230,10 +110,9 @@
     document.head.appendChild(link);
   }
 
-  // --- On-screen alert modal (uses modal.css) ---
+  // --- On-screen alert modal ---
   function showCenterAlert(text, host) {
     if (document.getElementById("clipboard-guard-alert")) return;
-
     injectModalCss();
 
     const overlay = document.createElement("div");
@@ -263,7 +142,7 @@
     reportBtn.className = "cg-btn-report";
     reportBtn.textContent = "Report to Security Team";
     reportBtn.onclick = () => {
-      generateReport(text, host);
+      showReportModal(text, host);
     };
     btnRow.appendChild(reportBtn);
 
@@ -271,32 +150,28 @@
     spacer.style.flex = "1";
     btnRow.appendChild(spacer);
 
+    // Whitelist button
     const whitelistBtn = document.createElement("button");
     whitelistBtn.className = "cg-btn-whitelist";
     whitelistBtn.textContent = "Whitelist this site";
     whitelistBtn.onclick = () => {
-      // Prevent duplicates
       if (document.querySelector(".cg-confirm-overlay")) return;
-
       const confirmBox = document.createElement("div");
       confirmBox.className = "cg-confirm-overlay";
-
       confirmBox.innerHTML = `
         <div class="cg-confirm-box">
-            <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
-            <div class="cg-confirm-text">
-                Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
-                This site may attempt to inject malicious clipboard payloads that could infect your computer.
-            </div>
-            <div class="cg-confirm-btns">
+          <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
+          <div class="cg-confirm-text">
+            Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
+            This site may attempt to inject malicious clipboard payloads that could infect your computer.
+          </div>
+          <div class="cg-confirm-btns">
             <button class="cg-btn-yes">Yes, continue</button>
             <button class="cg-btn-no">Cancel</button>
-            </div>
+          </div>
         </div>`;
-
       document.body.appendChild(confirmBox);
 
-      // Yes → whitelist + close both
       confirmBox.querySelector(".cg-btn-yes").onclick = () => {
         chrome.storage.local.get({ whitelist: [] }, (d) => {
           const wl = d.whitelist || [];
@@ -308,17 +183,14 @@
             });
           }
         });
-
         confirmBox.remove();
         overlay.remove();
       };
 
-      // No → just close confirm
-      confirmBox.querySelector(".cg-btn-no").onclick = () => {
-        confirmBox.remove();
-      };
+      confirmBox.querySelector(".cg-btn-no").onclick = () => confirmBox.remove();
     };
 
+    // Dismiss button
     const dismiss = document.createElement("button");
     dismiss.className = "cg-btn-dismiss";
     dismiss.textContent = "Dismiss";
@@ -344,38 +216,57 @@
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
   }
-    function generateReport(text, host) {
-    const now = new Date().toISOString();
-    const url = location.href;
-    const ua = navigator.userAgent;
-    const platform = navigator.platform;
 
-    chrome.storage.local.get({ userEmail: "unknown@example.com" }, (cfg) => {
-      const report = [
-        "=== ClickFix Report ===",
-        `Timestamp: ${now}`,
-        `URL: ${url}`,
-        `Source Host: ${host}`,
-        `Detected Clipboard Payload:`,
-        text,
-        "",
-        `User Email: ${cfg.userEmail}`,
-        `Browser/OS: ${ua} (${platform})`,
-        "========================"
-      ].join("\n");
+  // --- Report modal ---
+  function showReportModal(payload, origin) {
+    const overlay = document.createElement("div");
+    overlay.className = "cg-confirm-overlay";
 
-      const blob = new Blob([report], { type: "text/plain" });
-      const urlObj = URL.createObjectURL(blob);
+    const box = document.createElement("div");
+    box.className = "cg-confirm-box";
 
-      const a = document.createElement("a");
-      a.href = urlObj;
-      a.download = "ClickFix-Report-List.txt";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(urlObj);
+    box.innerHTML = `
+      <div class="cg-confirm-title">Report to Security Team</div>
+      <div class="cg-info-text">
+        Looks like you have encountered a potential malicious website.<br><br>
+        Please, press the <b>"Download Report"</b> button and send it to 
+        <b>security@strawberry.no</b>.<br><br>
+        This will help both you and your coworkers all over the organization 
+        to remain cyber safe.<br><br>
+        Best Regards<br>
+        Strawberry Security Team
+      </div>
+      <div class="cg-confirm-btns">
+        <button class="cg-btn-download">Download Report</button>
+        <button class="cg-btn-no">Close</button>
+      </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    box.querySelector(".cg-btn-no").addEventListener("click", () => {
+      overlay.remove();
+    });
+
+    box.querySelector(".cg-btn-download").addEventListener("click", () => {
+      const report = {
+        type: "ClickFix Threat Report",
+        origin,
+        payload,
+        timestamp: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      chrome.runtime.sendMessage({
+        type: "downloadReport",
+        url,
+        filename: "ClickFix-ThreatReport.json"
+      });
+
+      overlay.remove();
     });
   }
-
-  
 })();
