@@ -55,13 +55,23 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     });
   }
 
-  // 🔹 Handle report download
+  // 🔹 Handle report download request
   if (msg && msg.type === "downloadReport") {
-    chrome.downloads.download({
-      url: msg.url,
-      filename: msg.filename,
-      saveAs: true
-    });
+    try {
+      chrome.downloads.download({
+        url: msg.url,
+        filename: msg.filename || "ClickFix-ThreatReport.json",
+        saveAs: true
+      }, (downloadId) => {
+        if (chrome.runtime.lastError) {
+          console.error("Download failed:", chrome.runtime.lastError.message);
+        } else {
+          console.log("Download started, ID:", downloadId);
+        }
+      });
+    } catch (e) {
+      console.error("Download error:", e);
+    }
   }
 });
 
@@ -69,4 +79,3 @@ function truncate(s, n) {
   if (!s) return "";
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
-
