@@ -61,6 +61,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "downloadReport") {
+    chrome.downloads.download({
+      url: msg.url,
+      filename: msg.filename,
+      saveAs: true
+    });
+  }
+});
+
+
 // small helper
 function truncate(s, n) {
   if (!s) return "";
