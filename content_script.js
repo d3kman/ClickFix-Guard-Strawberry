@@ -250,34 +250,35 @@
     });
 
     box.querySelector(".cg-btn-download").addEventListener("click", () => {
-    const now = new Date().toISOString();
-    const url = location.href;
-    const ua = navigator.userAgent;
-    const platform = navigator.platform;
+      const now = new Date().toISOString();
+      const pageUrl = location.href;
+      const ua = navigator.userAgent;
+      const platform = navigator.platform;
 
-    // ✅ Expanded report with system + browser info
-    const report = {
-      reportType: "ClickFix Threat Report",
-      timestamp: now,
-      url: url,
-      sourceHost: origin,
-      detectedClipboardPayload: payload,
-      environment: {
-        userAgent: ua,
-        platform: platform
-      }
-    };
+      // ✅ Expanded report with system + browser info
+      const report = {
+        reportType: "ClickFix Threat Report",
+        timestamp: now,
+        url: pageUrl,
+        sourceHost: origin,
+        detectedClipboardPayload: payload,
+        environment: {
+          userAgent: ua,
+          platform: platform
+        }
+      };
 
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
+      const downloadUrl = URL.createObjectURL(blob);
 
       chrome.runtime.sendMessage({
         type: "downloadReport",
-        url,
+        url: downloadUrl,
         filename: "ClickFix-ThreatReport.json"
       });
 
       overlay.remove();
     });
   }
+
 })();
