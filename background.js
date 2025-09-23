@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     chrome.storage.local.get({ whitelist: [], logs: [] }, (data) => {
       if (Array.isArray(data.whitelist) && data.whitelist.includes(host)) return;
 
-      // ✅ Detailed log entry
+      // ✅ Detailed log entry (kept in full JSON form)
       const newLog = {
         reportType: "ClickFix Threat Log",
         time: new Date().toISOString(),
@@ -54,7 +54,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
             type: "basic",
             iconUrl: "icons/icon48.png",
             title: "⚠ Suspicious Clipboard Activity",
-            message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
+            message: `From: ${host}\n\nClipboard contents flagged.`
           });
         } catch (e) {
           console.error("Notification failed:", e);
@@ -65,8 +65,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
   if (msg && msg.type === "downloadReport") {
     try {
+      const blob = new Blob([JSON.stringify(msg.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
       chrome.downloads.download({
-        url: msg.url,
+        url,
         filename: msg.filename || "ClickFix-ThreatReport.json",
         saveAs: true
       });
