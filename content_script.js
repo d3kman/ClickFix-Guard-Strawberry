@@ -4,7 +4,7 @@
 // Runs in all frames (all_frames:true, match_about_blank:true).
 
 (function () {
-  // --- Inject a hook script into the page context ---
+  // Inject page hook from separate file (pageHook.js)
   const script = document.createElement("script");
   script.src = chrome.runtime.getURL("pageHook.js");
   (document.head || document.documentElement).appendChild(script);
@@ -18,11 +18,11 @@
     forwardCandidate({ method: payload.type || "unknown", text });
   });
 
-  // --- Detection regexes & hardcoded heuristics ---
+  // --- Detection regexes & heuristics ---
   const MALICIOUS_RE = /\b(powershell|invoke-webrequest|start-process|mshta(\.exe)?|cmd(\.exe)?|wget|curl|bitsadmin|certutil|rundll32|iex|invoke-expression|downloadstring)\b/i;
   const POWERSHELL_FLAGS_RE = /-(?:noprofile|executionpolicy|encodedcommand|enc|command)\b/i;
   const HTA_APPDATA_RE = /(%appdata%|\\appdata\\|%APPDATA%|\.hta)/i;
-  const URL_THEN_CMD_RE = /https?:\/\/\S+.*(?:;|&&|\||\`|\$\(.*\)|start-process)\b/i;
+  const URL_THEN_CMD_RE = /https?:\/\/\S+.*(?:;|&&|\||`|\$\(.*\)|start-process)\b/i;
 
   const HARDCODED_KEYWORDS = [
     "verification","id","#","powershell","mshta.exe",
@@ -51,9 +51,9 @@
       const normalized = safeText.replace(/[\u2011\u2013\u2014]/g, "-");
       const s = normalized.toLowerCase();
 
-      chrome.storage.local.get({ whitelist: [], keywords: [] }, (cfg) => {
-  const host = location.hostname || location.host || location.href || "unknown";
-  if (cfg.whitelist.includes(host)) return;
+      chrome.storage.sync.get({ whitelist: [], keywords: [] }, (cfg) => {
+        const host = location.hostname || location.host || location.href || "unknown";
+        if (cfg.whitelist && cfg.whitelist.includes(host)) return;
 
         if (
           MALICIOUS_RE.test(s) ||
@@ -82,6 +82,7 @@
         }
       });
 
+      // Always forward raw candidate for background logging
       chrome.runtime.sendMessage({
         type: "clipboardCandidateRaw",
         origin: location.hostname || location.host || location.href || "unknown",
@@ -94,15 +95,15 @@
   }
 
   function handleSuspicious(text, host) {
-  chrome.runtime.sendMessage({
-    type: "suspiciousClipboard",
-    payload: text,
-    origin: host
-  });
+    chrome.runtime.sendMessage({
+      type: "suspiciousClipboard",
+      payload: text,
+      origin: host
+    });
 
-  // Always show modal now
-  showCenterAlert(text, host);
-}
+    // Always show modal
+    showCenterAlert(text, host);
+  }
 
   // --- Inject CSS once ---
   function injectModalCss() {
@@ -177,11 +178,11 @@
       document.body.appendChild(confirmBox);
 
       confirmBox.querySelector(".cg-btn-yes").onclick = () => {
-        chrome.storage.local.get({ whitelist: [] }, (d) => {
+        chrome.storage.sync.get({ whitelist: [] }, (d) => {
           const wl = d.whitelist || [];
           if (!wl.includes(host)) {
             wl.push(host);
-            chrome.storage.local.set({ whitelist: wl }, () => {
+            chrome.storage.sync.set({ whitelist: wl }, () => {
               whitelistBtn.textContent = "Whitelisted ✓";
               whitelistBtn.disabled = true;
             });
@@ -207,11 +208,9 @@
     overlay.appendChild(box);
     document.documentElement.appendChild(overlay);
 
-    // ✅ Escape key cleanup (safe)
+    // Safe Esc handler
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && document.body.contains(overlay)) {
-        overlay.remove();
-      }
+      if (e.key === "Escape" && document.body.contains(overlay)) overlay.remove();
     }, { once: true });
   }
 
@@ -224,8 +223,9 @@
       .replaceAll("'", "&#039;");
   }
 
-  // --- Report modal ---
+  // --- Report modal and download (JSON) ---
   function showReportModal(payload, origin) {
+    // reusing the confirm overlay class for centered modal
     const overlay = document.createElement("div");
     overlay.className = "cg-confirm-overlay";
 
@@ -252,39 +252,43 @@
     overlay.appendChild(box);
     document.body.appendChild(overlay);
 
-    box.querySelector(".cg-btn-no").addEventListener("click", () => {
-      overlay.remove();
-    });
+    box.querySelector(".cg-btn-no").addEventListener("click", () => overlay.remove());
 
     box.querySelector(".cg-btn-download").addEventListener("click", () => {
-      const now = new Date().toISOString();
+      const nowIso = new Date().toISOString();
       const pageUrl = location.href;
       const ua = navigator.userAgent;
       const platform = navigator.platform;
 
-      // ✅ Expanded report with system + browser info
-      const report = {
-        reportType: "ClickFix Threat Report",
-        timestamp: now,
-        url: pageUrl,
-        sourceHost: origin || "unknown",
-        detectedClipboardPayload: payload,
-        environment: {
-          userAgent: ua,
-          platform: platform
-        }
-      };
+      // Build the report but include only the instanceId (not email)
+      chrome.storage.sync.get({ instanceId: null }, (s) => {
+        const instanceId = s.instanceId || "unknown";
 
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-      const downloadUrl = URL.createObjectURL(blob);
+        const report = {
+          reportType: "ClickFix Threat Report",
+          timestamp: nowIso,
+          url: pageUrl,
+          sourceHost: origin || "unknown",
+          detectedClipboardPayload: payload,
+          instanceId,
+          environment: {
+            userAgent: ua,
+            platform: platform
+          }
+        };
 
-      chrome.runtime.sendMessage({
-        type: "downloadReport",
-        url: downloadUrl,
-        filename: "ClickFix-ThreatReport.json"
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+        const downloadUrl = URL.createObjectURL(blob);
+
+        // Ask background to start the download
+        chrome.runtime.sendMessage({
+          type: "downloadReport",
+          url: downloadUrl,
+          filename: "ClickFix-ThreatReport.json"
+        });
+
+        overlay.remove();
       });
-
-      overlay.remove();
     });
   }
 
