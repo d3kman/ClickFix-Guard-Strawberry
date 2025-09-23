@@ -36,13 +36,21 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     chrome.storage.local.get({ whitelist: [], logs: [] }, (data) => {
       if (Array.isArray(data.whitelist) && data.whitelist.includes(host)) return;
 
-      // ✅ Detailed log entry (kept in full JSON form)
+      const now = new Date();
+
+      // ✅ Detailed log entry
       const newLog = {
         reportType: "ClickFix Threat Log",
-        time: new Date().toISOString(),
+        timeUTC: now.toISOString(),
+        timeLocal: now.toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" }),
         url: sender?.url || origin || "unknown",
         sourceHost: host,
-        detectedClipboardPayload: msg.payload || ""
+        detectedClipboardPayload: msg.payload || "",
+        environment: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language
+        }
       };
 
       const logs = Array.isArray(data.logs) ? data.logs : [];
@@ -54,7 +62,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
             type: "basic",
             iconUrl: "icons/icon48.png",
             title: "⚠ Suspicious Clipboard Activity",
-            message: `From: ${host}\n\nClipboard contents flagged.`
+            message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
           });
         } catch (e) {
           console.error("Notification failed:", e);
@@ -63,14 +71,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     });
   }
 
-if (msg && msg.type === "downloadReport") {
+  if (msg && msg.type === "downloadReport") {
   try {
-    const json = JSON.stringify(msg.data, null, 2);
+    const reportData = msg.data || msg; // fallback
+    const json = JSON.stringify(reportData, null, 2);
     const blobUrl = "data:application/json;base64," + btoa(unescape(encodeURIComponent(json)));
+
+    const filename = msg.filename || `ClickFix-ThreatReport-${Date.now()}.json`;
 
     chrome.downloads.download({
       url: blobUrl,
-      filename: msg.filename || "ClickFix-ThreatReport.json",
+      filename,
       saveAs: true
     });
   } catch (e) {
