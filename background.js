@@ -23,52 +23,62 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg && msg.type === "suspiciousClipboard") {
     const origin = msg.origin || (sender && sender.url) || "unknown";
 
-    let host = origin;
+    let host = origin || "unknown";
     try {
       if (origin && origin.includes("://")) {
-        host = new URL(origin).hostname;
+        host = new URL(origin).hostname || "unknown";
       } else if (sender?.url) {
-        host = new URL(sender.url).hostname;
+        host = new URL(sender.url).hostname || "unknown";
       }
     } catch (e) {
-      host = origin;
+      host = origin || "unknown";
     }
 
     chrome.storage.local.get({ whitelist: [], logs: [] }, (data) => {
-      if (data.whitelist.includes(host)) return;
+      const whitelist = Array.isArray(data.whitelist) ? data.whitelist : [];
+      if (whitelist.includes(host)) return;
 
       const newLog = {
-        text: msg.payload,
+        text: msg.payload || "",
         origin: host,
         time: new Date().toISOString()
       };
 
-      const updatedLogs = [newLog, ...(data.logs || [])].slice(0, 50);
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      const updatedLogs = [newLog, ...logs].slice(0, 50);
+
       chrome.storage.local.set({ logs: updatedLogs });
 
-      chrome.notifications.create({
-        type: "basic",
-        iconUrl: "icons/icon48.png",
-        title: "⚠ Suspicious Clipboard Activity",
-        message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
-      });
+      try {
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icons/icon48.png",
+          title: "⚠ Suspicious Clipboard Activity",
+          message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
+        });
+      } catch (e) {
+        console.error("Notification error:", e);
+      }
     });
   }
 
   // 🔹 Handle report download request
   if (msg && msg.type === "downloadReport") {
     try {
-      chrome.downloads.download({
-        url: msg.url,
-        filename: msg.filename || "ClickFix-ThreatReport.json",
-        saveAs: true
-      }, (downloadId) => {
-        if (chrome.runtime.lastError) {
-          console.error("Download failed:", chrome.runtime.lastError.message);
-        } else {
-          console.log("Download started, ID:", downloadId);
+      chrome.downloads.download(
+        {
+          url: msg.url,
+          filename: msg.filename || "ClickFix-ThreatReport.json",
+          saveAs: true
+        },
+        (downloadId) => {
+          if (chrome.runtime.lastError) {
+            console.error("Download failed:", chrome.runtime.lastError.message);
+          } else {
+            console.log("Download started, ID:", downloadId);
+          }
         }
-      });
+      );
     } catch (e) {
       console.error("Download error:", e);
     }
@@ -77,5 +87,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 function truncate(s, n) {
   if (!s) return "";
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+  const str = String(s);
+  return str.length > n ? str.slice(0, n - 1) + "…" : str;
 }
