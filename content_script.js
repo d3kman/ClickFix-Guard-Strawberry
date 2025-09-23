@@ -1,16 +1,14 @@
 // content_script.js
 // Injects page-context hooks to intercept clipboard writes,
 // detects suspicious payloads, and alerts the user.
-// Runs in all frames (all_frames:true, match_about_blank:true).
 
 (function () {
-  // Inject page hook from separate file (pageHook.js)
+  // Inject page hook
   const script = document.createElement("script");
   script.src = chrome.runtime.getURL("pageHook.js");
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 
-  // --- Listen for events posted from page ---
   window.addEventListener("message", (evt) => {
     if (!evt.data || !evt.data.__clipboardGuardFromPage) return;
     const payload = evt.data.data || {};
@@ -18,7 +16,6 @@
     forwardCandidate({ method: payload.type || "unknown", text });
   });
 
-  // --- Detection regexes & heuristics ---
   const MALICIOUS_RE = /\b(powershell|invoke-webrequest|start-process|mshta(\.exe)?|cmd(\.exe)?|wget|curl|bitsadmin|certutil|rundll32|iex|invoke-expression|downloadstring)\b/i;
   const POWERSHELL_FLAGS_RE = /-(?:noprofile|executionpolicy|encodedcommand|enc|command)\b/i;
   const HTA_APPDATA_RE = /(%appdata%|\\appdata\\|%APPDATA%|\.hta)/i;
@@ -37,16 +34,7 @@
   function forwardCandidate({ method, text }) {
     try {
       const safeText = typeof text === "string" ? text : "";
-
-      if (!safeText) {
-        chrome.runtime.sendMessage({
-          type: "clipboardCandidateRaw",
-          origin: location.hostname || location.host || location.href || "unknown",
-          method,
-          text: ""
-        });
-        return;
-      }
+      if (!safeText) return;
 
       const normalized = safeText.replace(/[\u2011\u2013\u2014]/g, "-");
       const s = normalized.toLowerCase();
@@ -81,14 +69,6 @@
           return;
         }
       });
-
-      // Always forward raw candidate for background logging
-      chrome.runtime.sendMessage({
-        type: "clipboardCandidateRaw",
-        origin: location.hostname || location.host || location.href || "unknown",
-        method,
-        text: safeText
-      });
     } catch (e) {
       console.error("Clipboard Guard forwardCandidate error", e);
     }
@@ -100,12 +80,9 @@
       payload: text,
       origin: host
     });
-
-    // Always show modal
-    showCenterAlert(text, host);
+    showCenterAlert(text, host); // always show modal
   }
 
-  // --- Inject CSS once ---
   function injectModalCss() {
     if (document.getElementById("clipboard-guard-style")) return;
     const link = document.createElement("link");
@@ -115,7 +92,6 @@
     document.head.appendChild(link);
   }
 
-  // --- On-screen alert modal ---
   function showCenterAlert(text, host) {
     if (document.getElementById("clipboard-guard-alert")) return;
     injectModalCss();
@@ -142,7 +118,6 @@
     const btnRow = document.createElement("div");
     btnRow.className = "cg-btn-row";
 
-    // Report button (bottom-left)
     const reportBtn = document.createElement("button");
     reportBtn.className = "cg-btn-report";
     reportBtn.textContent = "Report to Security Team";
@@ -155,47 +130,23 @@
     spacer.style.flex = "1";
     btnRow.appendChild(spacer);
 
-    // Whitelist button
     const whitelistBtn = document.createElement("button");
     whitelistBtn.className = "cg-btn-whitelist";
     whitelistBtn.textContent = "Whitelist this site";
     whitelistBtn.onclick = () => {
-      if (document.querySelector(".cg-confirm-overlay")) return;
-      const confirmBox = document.createElement("div");
-      confirmBox.className = "cg-confirm-overlay";
-      confirmBox.innerHTML = `
-        <div class="cg-confirm-box">
-          <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
-          <div class="cg-confirm-text">
-            Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
-            This site may attempt to inject malicious clipboard payloads that could infect your computer.
-          </div>
-          <div class="cg-confirm-btns">
-            <button class="cg-btn-yes">Yes, continue</button>
-            <button class="cg-btn-no">Cancel</button>
-          </div>
-        </div>`;
-      document.body.appendChild(confirmBox);
-
-      confirmBox.querySelector(".cg-btn-yes").onclick = () => {
-        chrome.storage.sync.get({ whitelist: [] }, (d) => {
-          const wl = d.whitelist || [];
-          if (!wl.includes(host)) {
-            wl.push(host);
-            chrome.storage.sync.set({ whitelist: wl }, () => {
-              whitelistBtn.textContent = "Whitelisted ✓";
-              whitelistBtn.disabled = true;
-            });
-          }
-        });
-        confirmBox.remove();
-        overlay.remove();
-      };
-
-      confirmBox.querySelector(".cg-btn-no").onclick = () => confirmBox.remove();
+      chrome.storage.sync.get({ whitelist: [] }, (d) => {
+        const wl = d.whitelist || [];
+        if (!wl.includes(host)) {
+          wl.push(host);
+          chrome.storage.sync.set({ whitelist: wl }, () => {
+            whitelistBtn.textContent = "Whitelisted ✓";
+            whitelistBtn.disabled = true;
+          });
+        }
+      });
+      overlay.remove();
     };
 
-    // Dismiss button
     const dismiss = document.createElement("button");
     dismiss.className = "cg-btn-dismiss";
     dismiss.textContent = "Dismiss";
@@ -208,7 +159,6 @@
     overlay.appendChild(box);
     document.documentElement.appendChild(overlay);
 
-    // Safe Esc handler
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && document.body.contains(overlay)) overlay.remove();
     }, { once: true });
@@ -223,7 +173,6 @@
       .replaceAll("'", "&#039;");
   }
 
-  // --- Report modal and download (JSON) ---
   function showReportModal(payload, origin) {
     const overlay = document.createElement("div");
     overlay.className = "cg-confirm-overlay";
@@ -234,13 +183,9 @@
     box.innerHTML = `
       <div class="cg-confirm-title">Report to Security Team</div>
       <div class="cg-info-text">
-        Looks like you have encountered a potential malicious website.<br><br>
-        Please, press the <b>"Download Report"</b> button and send the file to 
+        Please press <b>"Download Report"</b> and send the file to 
         <b>security@strawberry.no</b>.<br><br>
-        This will help both you and your coworkers all over the organization 
-        to remain cyber-safe.<br><br>
-        Best Regards<br>
-        Strawberry Security Team
+        This helps protect the organization.
       </div>
       <div class="cg-confirm-btns">
         <button class="cg-btn-download">Download Report</button>
@@ -254,38 +199,31 @@
     box.querySelector(".cg-btn-no").addEventListener("click", () => overlay.remove());
 
     box.querySelector(".cg-btn-download").addEventListener("click", () => {
-      chrome.storage.sync.get({ instanceId: null, userEmail: null }, (s) => {
-        const nowIso = new Date().toISOString();
-        const pageUrl = location.href;
-        const ua = navigator.userAgent;
-        const platform = navigator.platform;
+      const nowIso = new Date().toISOString();
+      const pageUrl = location.href;
+      const ua = navigator.userAgent;
+      const platform = navigator.platform;
 
-        const report = {
-          reportType: "ClickFix Threat Report",
-          timestamp: nowIso,
-          url: pageUrl,
-          sourceHost: origin || "unknown",
-          detectedClipboardPayload: payload,
-          instanceId: s.instanceId || "unknown",
-          userEmail: s.userEmail || "not available",
-          environment: {
-            userAgent: ua,
-            platform: platform
-          }
-        };
+      const report = {
+        reportType: "ClickFix Threat Report",
+        timestamp: nowIso,
+        url: pageUrl,
+        sourceHost: origin || "unknown",
+        detectedClipboardPayload: payload,
+        environment: { userAgent: ua, platform }
+      };
 
-        const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-        const downloadUrl = URL.createObjectURL(blob);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const downloadUrl = URL.createObjectURL(blob);
 
-        chrome.runtime.sendMessage({
-          type: "downloadReport",
-          url: downloadUrl,
-          filename: `ClickFix-ThreatReport-${s.instanceId || "unknown"}.json`
-        });
-
-        overlay.remove();
+      chrome.runtime.sendMessage({
+        type: "downloadReport",
+        url: downloadUrl,
+        filename: "ClickFix-ThreatReport.json"
       });
+
+      overlay.remove();
     });
   }
-
 })();
+
