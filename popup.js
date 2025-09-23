@@ -146,3 +146,4 @@ function escapeHtml(unsafe) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
