@@ -1,8 +1,8 @@
 // background.js
-// Handles suspiciousClipboard messages, notifications, log storage.
+// Handles suspiciousClipboard messages, notifications, log storage and default settings.
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.sync.get(null, (items) => {
+  chrome.storage.local.get(null, (items) => {
     const defaults = {
       whitelist: [],
       logs: [],
@@ -13,52 +13,53 @@ chrome.runtime.onInstalled.addListener(() => {
       if (!(k in items)) toSet[k] = defaults[k];
     }
     if (Object.keys(toSet).length > 0) {
-      chrome.storage.sync.set(toSet);
+      chrome.storage.local.set(toSet);
     }
   });
 });
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg && msg.type === "suspiciousClipboard") {
-    (async () => {
-      let origin = msg.origin || (sender && sender.url) || "unknown";
-      let host = origin;
-      try {
-        if (origin && origin.includes("://")) host = new URL(origin).hostname || origin;
-        else if (sender && sender.url) host = new URL(sender.url).hostname || origin;
-      } catch (e) {
-        host = origin || "unknown";
+    const origin = msg.origin || sender?.url || "unknown";
+
+    let host = origin;
+    try {
+      if (origin.includes("://")) {
+        host = new URL(origin).hostname;
+      } else if (sender?.url) {
+        host = new URL(sender.url).hostname;
       }
+    } catch (e) {
+      host = origin || "unknown";
+    }
 
-      chrome.storage.sync.get({ whitelist: [], logs: [] }, (data) => {
-        const whitelist = Array.isArray(data.whitelist) ? data.whitelist : [];
-        if (whitelist.includes(host)) return;
+    chrome.storage.local.get({ whitelist: [], logs: [] }, (data) => {
+      if (Array.isArray(data.whitelist) && data.whitelist.includes(host)) return;
 
-        const now = new Date().toISOString();
-        const newLog = {
-          reportType: "ClickFix Threat Log",
-          time: now,
-          url: sender?.url || origin || "unknown",
-          sourceHost: host,
-          detectedClipboardPayload: msg.payload || ""
-        };
+      const newLog = {
+        reportType: "ClickFix Threat Log",
+        time: new Date().toISOString(),
+        url: sender?.url || origin || "unknown",
+        sourceHost: host,
+        detectedClipboardPayload: msg.payload || ""
+      };
 
-        const logs = Array.isArray(data.logs) ? data.logs : [];
-        const updatedLogs = [newLog, ...logs].slice(0, 50);
-        chrome.storage.sync.set({ logs: updatedLogs }, () => {
-          try {
-            chrome.notifications.create({
-              type: "basic",
-              iconUrl: "icons/icon48.png",
-              title: "⚠ Suspicious Clipboard Activity",
-              message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
-            });
-          } catch (e) {
-            console.error("Notification failed:", e);
-          }
-        });
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      const updatedLogs = [newLog, ...logs].slice(0, 50);
+
+      chrome.storage.local.set({ logs: updatedLogs }, () => {
+        try {
+          chrome.notifications.create({
+            type: "basic",
+            iconUrl: "icons/icon48.png",
+            title: "⚠ Suspicious Clipboard Activity",
+            message: `From: ${host}\n\n${truncate(msg.payload, 200)}`
+          });
+        } catch (e) {
+          console.error("Notification failed:", e);
+        }
       });
-    })();
+    });
   }
 
   if (msg && msg.type === "downloadReport") {
@@ -76,7 +77,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 function truncate(s, n) {
   if (!s) return "";
-  const str = String(s);
-  return str.length > n ? str.slice(0, n - 1) + "…" : str;
+  return String(s).length > n ? String(s).slice(0, n - 1) + "…" : s;
 }
+
 
