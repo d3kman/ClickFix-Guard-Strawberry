@@ -6,8 +6,7 @@ chrome.runtime.onInstalled.addListener(() => {
     const defaults = {
       whitelist: [],
       logs: [],
-      keywords: [],
-      onScreenAlerts: true
+      keywords: []
     };
     const toSet = {};
     for (const k in defaults) {
