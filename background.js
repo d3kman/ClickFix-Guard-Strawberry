@@ -63,20 +63,21 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     });
   }
 
-  if (msg && msg.type === "downloadReport") {
-    try {
-      const blob = new Blob([JSON.stringify(msg.data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
+if (msg && msg.type === "downloadReport") {
+  try {
+    const json = JSON.stringify(msg.data, null, 2);
+    const blobUrl = "data:application/json;base64," + btoa(unescape(encodeURIComponent(json)));
 
-      chrome.downloads.download({
-        url,
-        filename: msg.filename || "ClickFix-ThreatReport.json",
-        saveAs: true
-      });
-    } catch (e) {
-      console.error("Download error:", e);
-    }
+    chrome.downloads.download({
+      url: blobUrl,
+      filename: msg.filename || "ClickFix-ThreatReport.json",
+      saveAs: true
+    });
+  } catch (e) {
+    console.error("Download error:", e);
   }
+}
+
 });
 
 function truncate(s, n) {
