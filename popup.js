@@ -28,8 +28,7 @@ function renderAll() {
         if (!data.logs || data.logs.length === 0) {
             logsContainer.textContent = "No suspicious events logged.";
         } else {
-            data.logs.forEach(log => {
-                // ✅ Map detailed → simplified display
+            data.logs.forEach((log, index) => {
                 const origin = log.sourceHost || log.origin || "unknown";
                 const text = log.detectedClipboardPayload || log.text || "";
                 const time = log.time || new Date().toISOString();
@@ -41,16 +40,25 @@ function renderAll() {
                     <div class="small">${escapeHtml(truncate(text, 300))}</div>
                     <div class="time">${new Date(time).toLocaleString()}</div>
                     <div style="margin-top:6px;">
-                        <button data-origin="${escapeHtml(origin)}" class="whBtn">Whitelist</button>
+                        <button data-index="${index}" class="dlBtn">Download Report</button>
                     </div>`;
                 logsContainer.appendChild(div);
             });
 
-            // attach whitelist button handlers
-            logsContainer.querySelectorAll(".whBtn").forEach(btn => {
+            // attach download button handlers
+            logsContainer.querySelectorAll(".dlBtn").forEach(btn => {
                 btn.addEventListener("click", (e) => {
-                    const origin = e.target.getAttribute("data-origin");
-                    addWhitelist(origin);
+                    const idx = e.target.getAttribute("data-index");
+                    chrome.storage.local.get({ logs: [] }, (d) => {
+                        const entry = d.logs[idx];
+                        if (entry) {
+                            chrome.runtime.sendMessage({
+                                type: "downloadReport",
+                                data: entry,
+                                filename: `ClickFix-ThreatReport-${entry.time}.json`
+                            });
+                        }
+                    });
                 });
             });
         }
@@ -150,4 +158,3 @@ function escapeHtml(unsafe) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
-
