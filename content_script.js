@@ -205,9 +205,13 @@
     box.innerHTML = `
       <div class="cg-confirm-title">Report to Security Team</div>
       <div class="cg-info-text">
-        Please press <b>"Download Report"</b> and send the file to 
+        Looks like you have encountered a potential malicious website.<br><br>
+        Please, press the <b>"Download Report"</b> button and send it to 
         <b>security@strawberry.no</b>.<br><br>
-        This helps protect the organization.
+        This will help both you and your coworkers all over the organization 
+        to remain cyber safe.<br><br>
+        Best Regards<br>
+        Strawberry Security Team
       </div>
       <div class="cg-confirm-btns">
         <button class="cg-btn-download">Download Report</button>
