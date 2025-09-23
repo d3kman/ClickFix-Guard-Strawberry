@@ -94,16 +94,15 @@
   }
 
   function handleSuspicious(text, host) {
-    chrome.runtime.sendMessage({
-      type: "suspiciousClipboard",
-      payload: text,
-      origin: host
-    });
+  chrome.runtime.sendMessage({
+    type: "suspiciousClipboard",
+    payload: text,
+    origin: host
+  });
 
-    chrome.storage.local.get({ onScreenAlerts: true }, (cfg) => {
-      if (cfg.onScreenAlerts) showCenterAlert(text, host);
-    });
-  }
+  // Always show modal now
+  showCenterAlert(text, host);
+}
 
   // --- Inject CSS once ---
   function injectModalCss() {
