@@ -29,14 +29,20 @@ function renderAll() {
             logsContainer.textContent = "No suspicious events logged.";
         } else {
             data.logs.forEach(log => {
+                // ✅ Map detailed → simplified display
+                const origin = log.sourceHost || log.origin || "unknown";
+                const text = log.detectedClipboardPayload || log.text || "";
+                const time = log.time || new Date().toISOString();
+
                 const div = document.createElement("div");
                 div.className = "log";
-                div.innerHTML = `<div class="origin">${escapeHtml(log.origin)}</div>
-                                 <div class="small">${escapeHtml(truncate(log.text, 300))}</div>
-                                 <div class="time">${new Date(log.time).toLocaleString()}</div>
-                                 <div style="margin-top:6px;">
-                                    <button data-origin="${escapeHtml(log.origin)}" class="whBtn">Whitelist</button>
-                                 </div>`;
+                div.innerHTML = `
+                    <div class="origin">${escapeHtml(origin)}</div>
+                    <div class="small">${escapeHtml(truncate(text, 300))}</div>
+                    <div class="time">${new Date(time).toLocaleString()}</div>
+                    <div style="margin-top:6px;">
+                        <button data-origin="${escapeHtml(origin)}" class="whBtn">Whitelist</button>
+                    </div>`;
                 logsContainer.appendChild(div);
             });
 
@@ -79,7 +85,6 @@ function saveKeywords() {
 }
 
 function resetKeywords() {
-    // Clear only user-defined keywords
     chrome.storage.local.set({ keywords: [] }, () => {
         document.getElementById("keywordsArea").value = "";
         alert("Custom keywords cleared. Built-in protections remain active.");
@@ -94,7 +99,6 @@ function clearLogs() {
 
 function addWhitelist(arg) {
     if (typeof arg === "string" && arg.includes(".")) {
-        // called from button or programmatically with host
         const host = arg;
         chrome.storage.local.get({ whitelist: [] }, data => {
             const list = data.whitelist || [];
@@ -135,7 +139,7 @@ function clearWhitelist() {
 // helpers
 function truncate(s, n) {
     if (!s) return "";
-    return s.length > n ? s.slice(0, n - 1) + "…" : s;
+    return String(s).length > n ? s.slice(0, n - 1) + "…" : s;
 }
 function escapeHtml(unsafe) {
     if (unsafe === undefined || unsafe === null) return "";
