@@ -33,6 +33,21 @@ function getCETTimeString() {
   }
 }
 
+// Ensure instanceId always exists (run at startup, not only install)
+function ensureInstanceId() {
+  chrome.storage.sync.get(["instanceId"], (items) => {
+    if (!items.instanceId) {
+      const newId = generateShortId(12);
+      chrome.storage.sync.set({
+        instanceId: newId,
+        instanceCreated: new Date().toISOString()
+      }, () => {
+        collectIdentityAndPostMapping(newId);
+      });
+    }
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   // Ensure defaults in storage.sync
   chrome.storage.sync.get(null, (items) => {
@@ -40,32 +55,35 @@ chrome.runtime.onInstalled.addListener(() => {
       whitelist: [],
       logs: [],
       keywords: []
-      // mappingWebhookUrl is optional - set via admin
     };
     const toSet = {};
+
     for (const k in defaults) {
       if (!(k in items)) toSet[k] = defaults[k];
     }
-    // ensure we have instanceId persisted in sync (per user)
+
+    // also create instanceId if missing
     if (!items.instanceId) {
-      toSet.instanceId = generateShortId(12); // 12 char id
+      const id = generateShortId(12);
+      toSet.instanceId = id;
       toSet.instanceCreated = new Date().toISOString();
     }
+
     if (Object.keys(toSet).length > 0) {
       chrome.storage.sync.set(toSet, () => {
-        // If we just created instanceId, try to collect identity + post mapping
-        if (toSet.instanceId) {
-          collectIdentityAndPostMapping(toSet.instanceId);
-        }
+        if (toSet.instanceId) collectIdentityAndPostMapping(toSet.instanceId);
       });
     } else {
-      // instanceId might already exist; still attempt to collect identity if email missing
-      chrome.storage.sync.get(["instanceId", "userEmail", "userId"], (s) => {
+      // instanceId might already exist, still collect identity if missing
+      chrome.storage.sync.get(["instanceId", "userEmail"], (s) => {
         if (s.instanceId && !s.userEmail) collectIdentityAndPostMapping(s.instanceId);
       });
     }
   });
 });
+
+// 🔹 ensure instanceId on every startup, not just install
+ensureInstanceId();
 
 // Collect identity (if available on managed Chrome) and optionally POST mapping
 function collectIdentityAndPostMapping(instanceId) {
@@ -173,8 +191,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       console.error("Download initiation error:", e);
     }
   }
-
-  // (you can add other message handlers here)
 });
 
 // small helper
@@ -183,3 +199,4 @@ function truncate(s, n) {
   const str = String(s);
   return str.length > n ? str.slice(0, n - 1) + "…" : str;
 }
+
