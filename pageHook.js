@@ -1,12 +1,13 @@
+// pageHook.js - runs in page context (injected by content_script.js)
 (() => {
-  const origWrite = navigator.clipboard?.write?.bind(navigator.clipboard) || null;
-  const origWriteText = navigator.clipboard?.writeText?.bind(navigator.clipboard) || null;
-  const origExec = document.execCommand?.bind(document) || null;
+  const origWrite = navigator.clipboard && navigator.clipboard.write ? navigator.clipboard.write.bind(navigator.clipboard) : null;
+  const origWriteText = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText.bind(navigator.clipboard) : null;
+  const origExec = document.execCommand ? document.execCommand.bind(document) : null;
 
   function notify(obj) {
     try {
       window.postMessage({ __clipboardGuardFromPage: true, data: obj }, "*");
-    } catch (_) {}
+    } catch (e) {}
   }
 
   if (origWrite) {
@@ -16,22 +17,22 @@
         if (Array.isArray(items)) {
           for (const it of items) {
             try {
-              if (it?.getType) {
-                const blob = await it.getType("text/plain").catch(() => null);
-                if (blob) text = text || await blob.text().catch(() => "");
+              if (it && it.getType) {
+                const blob = await it.getType("text/plain").catch(()=>null);
+                if (blob) text = text || await blob.text().catch(()=>"");
               }
-            } catch (_) {}
+            } catch(e){}
           }
         }
         notify({ type: "write", text });
-      } catch (_) {}
+      } catch(e){}
       return origWrite.apply(this, arguments);
     };
   }
 
   if (origWriteText) {
     navigator.clipboard.writeText = async function (text) {
-      try { notify({ type: "writeText", text: String(text) }); } catch(_) {}
+      try { notify({ type: "writeText", text: String(text) }); } catch(e){}
       return origWriteText.apply(this, arguments);
     };
   }
@@ -43,36 +44,35 @@
           let captured = "";
           try {
             const sel = document.getSelection();
-            if (sel?.toString()) captured = sel.toString();
+            if (sel && sel.toString()) captured = sel.toString();
             else if (document.activeElement) {
               const ae = document.activeElement;
               if (ae.value) captured = ae.value;
               else if (ae.innerText) captured = ae.innerText;
             }
-          } catch (_) {}
+          } catch (e){}
           notify({ type: "execCopy", text: String(captured) });
         }
-      } catch (_) {}
+      } catch(e){}
       return origExec.apply(this, [cmd, ...args]);
     };
   }
 
   try {
-    document.addEventListener("copy", (ev) => {
+    document.addEventListener('copy', function (ev) {
       try {
-        let text = "";
-        if (ev?.clipboardData?.getData) {
-          text = ev.clipboardData.getData("text/plain") || "";
+        let text = '';
+        if (ev && ev.clipboardData && ev.clipboardData.getData) {
+          text = ev.clipboardData.getData('text/plain') || '';
         } else {
           const sel = document.getSelection();
           if (sel) text = sel.toString();
         }
-        notify({ type: "copyEvent", text: String(text) });
-      } catch (_) {}
+        notify({ type: 'copyEvent', text: String(text) });
+      } catch(e){}
     }, true);
-  } catch (_) {}
-
-  // Hook DataTransfer.prototype.setData
+  } catch(e){}
+  // Also hook DataTransfer.prototype.setData if available
   try {
     const origSetData = DataTransfer.prototype.setData;
     DataTransfer.prototype.setData = function(format, data) {
@@ -83,7 +83,7 @@
       } catch (_) {}
       return origSetData.apply(this, arguments);
     };
-  } catch (_) {}
+  } catch(_) {}
 
   window.__clipboardGuardInjected = true;
 })();
