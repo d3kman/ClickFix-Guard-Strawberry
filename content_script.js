@@ -229,10 +229,10 @@
       <div class="cg-confirm-title">Report to Security Team</div>
       <div class="cg-info-text">
         Looks like you have encountered a potential malicious website.<br><br>
-        Please, press the <b>"Download Report"</b> button and send it to 
+        Please, press the <b>"Download Report"</b> button and send the file to 
         <b>security@strawberry.no</b>.<br><br>
         This will help both you and your coworkers all over the organization 
-        to remain cyber safe.<br><br>
+        to remain cyber-safe.<br><br>
         Best Regards<br>
         Strawberry Security Team
       </div>
