@@ -51,9 +51,9 @@
       const normalized = safeText.replace(/[\u2011\u2013\u2014]/g, "-");
       const s = normalized.toLowerCase();
 
-      chrome.storage.local.get({ whitelist: [], keywords: [], onScreenAlerts: true }, (cfg) => {
-        const host = location.hostname || location.host || location.href || "unknown";
-        if (cfg.whitelist.includes(host)) return;
+      chrome.storage.local.get({ whitelist: [], keywords: [] }, (cfg) => {
+  const host = location.hostname || location.host || location.href || "unknown";
+  if (cfg.whitelist.includes(host)) return;
 
         if (
           MALICIOUS_RE.test(s) ||
