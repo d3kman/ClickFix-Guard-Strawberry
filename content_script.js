@@ -225,7 +225,6 @@
 
   // --- Report modal and download (JSON) ---
   function showReportModal(payload, origin) {
-    // reusing the confirm overlay class for centered modal
     const overlay = document.createElement("div");
     overlay.className = "cg-confirm-overlay";
 
@@ -255,14 +254,11 @@
     box.querySelector(".cg-btn-no").addEventListener("click", () => overlay.remove());
 
     box.querySelector(".cg-btn-download").addEventListener("click", () => {
-      const nowIso = new Date().toISOString();
-      const pageUrl = location.href;
-      const ua = navigator.userAgent;
-      const platform = navigator.platform;
-
-      // Build the report but include only the instanceId (not email)
-      chrome.storage.sync.get({ instanceId: null }, (s) => {
-        const instanceId = s.instanceId || "unknown";
+      chrome.storage.sync.get({ instanceId: null, userEmail: null }, (s) => {
+        const nowIso = new Date().toISOString();
+        const pageUrl = location.href;
+        const ua = navigator.userAgent;
+        const platform = navigator.platform;
 
         const report = {
           reportType: "ClickFix Threat Report",
@@ -270,7 +266,8 @@
           url: pageUrl,
           sourceHost: origin || "unknown",
           detectedClipboardPayload: payload,
-          instanceId,
+          instanceId: s.instanceId || "unknown",
+          userEmail: s.userEmail || "not available",
           environment: {
             userAgent: ua,
             platform: platform
@@ -280,11 +277,10 @@
         const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
         const downloadUrl = URL.createObjectURL(blob);
 
-        // Ask background to start the download
         chrome.runtime.sendMessage({
           type: "downloadReport",
           url: downloadUrl,
-          filename: "ClickFix-ThreatReport.json"
+          filename: `ClickFix-ThreatReport-${s.instanceId || "unknown"}.json`
         });
 
         overlay.remove();
@@ -293,4 +289,3 @@
   }
 
 })();
-
