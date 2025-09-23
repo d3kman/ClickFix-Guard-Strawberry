@@ -36,6 +36,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     chrome.storage.local.get({ whitelist: [], logs: [] }, (data) => {
       if (Array.isArray(data.whitelist) && data.whitelist.includes(host)) return;
 
+      // ✅ Detailed log entry
       const newLog = {
         reportType: "ClickFix Threat Log",
         time: new Date().toISOString(),
@@ -77,7 +78,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 function truncate(s, n) {
   if (!s) return "";
-  return String(s).length > n ? String(s).slice(0, n - 1) + "…" : s;
+  const str = String(s);
+  return str.length > n ? str.slice(0, n - 1) + "…" : str;
 }
-
-
