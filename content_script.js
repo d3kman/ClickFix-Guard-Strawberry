@@ -204,7 +204,9 @@
     document.documentElement.appendChild(overlay);
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") overlay.remove();
+      if (e.key === "Escape" && document.body.contains(overlay)) {
+  overlay.remove();
+}
     }, { once: true });
   }
 
