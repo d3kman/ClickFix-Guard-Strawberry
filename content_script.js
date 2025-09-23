@@ -14,7 +14,7 @@
   window.addEventListener("message", (evt) => {
     if (!evt.data || !evt.data.__clipboardGuardFromPage) return;
     const payload = evt.data.data || {};
-    const text = String(payload.text || "").trim();
+    const text = typeof payload.text === "string" ? payload.text.trim() : "";
     forwardCandidate({ method: payload.type || "unknown", text });
   });
 
@@ -36,20 +36,23 @@
 
   function forwardCandidate({ method, text }) {
     try {
-      if (!text) {
+      const safeText = typeof text === "string" ? text : "";
+
+      if (!safeText) {
         chrome.runtime.sendMessage({
           type: "clipboardCandidateRaw",
-          origin: location.hostname || location.host || location.href,
-          method, text: ""
+          origin: location.hostname || location.host || location.href || "unknown",
+          method,
+          text: ""
         });
         return;
       }
 
-      const normalized = text.replace(/[\u2011\u2013\u2014]/g, "-");
+      const normalized = safeText.replace(/[\u2011\u2013\u2014]/g, "-");
       const s = normalized.toLowerCase();
 
       chrome.storage.local.get({ whitelist: [], keywords: [], onScreenAlerts: true }, (cfg) => {
-        const host = location.hostname || location.host || "unknown";
+        const host = location.hostname || location.host || location.href || "unknown";
         if (cfg.whitelist.includes(host)) return;
 
         if (
@@ -58,31 +61,32 @@
           HTA_APPDATA_RE.test(s) ||
           URL_THEN_CMD_RE.test(s)
         ) {
-          handleSuspicious(text, host);
+          handleSuspicious(safeText, host);
           return;
         }
 
         const matches = TOKENS.filter(t => s.includes(t));
         if (matches.length >= 2) {
-          handleSuspicious(text, host);
+          handleSuspicious(safeText, host);
           return;
         }
 
         if (HARDCODED_KEYWORDS.some(k => s.includes(k.toLowerCase()))) {
-          handleSuspicious(text, host);
+          handleSuspicious(safeText, host);
           return;
         }
 
         if (Array.isArray(cfg.keywords) && cfg.keywords.some(k => k && s.includes(String(k).toLowerCase()))) {
-          handleSuspicious(text, host);
+          handleSuspicious(safeText, host);
           return;
         }
       });
 
       chrome.runtime.sendMessage({
         type: "clipboardCandidateRaw",
-        origin: location.hostname || location.host || location.href,
-        method, text
+        origin: location.hostname || location.host || location.href || "unknown",
+        method,
+        text: safeText
       });
     } catch (e) {
       console.error("Clipboard Guard forwardCandidate error", e);
@@ -92,7 +96,8 @@
   function handleSuspicious(text, host) {
     chrome.runtime.sendMessage({
       type: "suspiciousClipboard",
-      payload: text, origin: host
+      payload: text,
+      origin: host
     });
 
     chrome.storage.local.get({ onScreenAlerts: true }, (cfg) => {
@@ -203,10 +208,11 @@
     overlay.appendChild(box);
     document.documentElement.appendChild(overlay);
 
+    // ✅ Escape key cleanup (safe)
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && document.body.contains(overlay)) {
-  overlay.remove();
-}
+        overlay.remove();
+      }
     }, { once: true });
   }
 
@@ -262,7 +268,7 @@
         reportType: "ClickFix Threat Report",
         timestamp: now,
         url: pageUrl,
-        sourceHost: origin,
+        sourceHost: origin || "unknown",
         detectedClipboardPayload: payload,
         environment: {
           userAgent: ua,
@@ -284,3 +290,4 @@
   }
 
 })();
+
