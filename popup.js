@@ -45,7 +45,7 @@ function renderAll() {
                 logsContainer.appendChild(div);
             });
 
-            // attach download button handlers
+            // ✅ attach download button handlers
             logsContainer.querySelectorAll(".dlBtn").forEach(btn => {
                 btn.addEventListener("click", (e) => {
                     const idx = e.target.getAttribute("data-index");
@@ -54,8 +54,8 @@ function renderAll() {
                         if (entry) {
                             chrome.runtime.sendMessage({
                                 type: "downloadReport",
-                                data: entry,
-                                filename: `ClickFix-ThreatReport-${entry.time}.json`
+                                json: JSON.stringify(entry, null, 2),
+                                filename: `ClickFix-ThreatReport-${Date.now()}.json`
                             });
                         }
                     });
