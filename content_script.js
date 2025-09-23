@@ -1,25 +1,28 @@
 // content_script.js
 // Injects page-context hooks to intercept clipboard writes,
 // detects suspicious payloads, and alerts the user.
+// Runs in all frames (all_frames:true, match_about_blank:true).
 
 (function () {
-  // Inject page hook
+  // --- Inject a hook script into the page context (pageHook.js is bundled) ---
   const script = document.createElement("script");
   script.src = chrome.runtime.getURL("pageHook.js");
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 
+  // --- Listen for events posted from page ---
   window.addEventListener("message", (evt) => {
     if (!evt.data || !evt.data.__clipboardGuardFromPage) return;
     const payload = evt.data.data || {};
-    const text = typeof payload.text === "string" ? payload.text.trim() : "";
+    const text = String(payload.text || "").trim();
     forwardCandidate({ method: payload.type || "unknown", text });
   });
 
+  // --- Detection regexes & hardcoded heuristics ---
   const MALICIOUS_RE = /\b(powershell|invoke-webrequest|start-process|mshta(\.exe)?|cmd(\.exe)?|wget|curl|bitsadmin|certutil|rundll32|iex|invoke-expression|downloadstring)\b/i;
   const POWERSHELL_FLAGS_RE = /-(?:noprofile|executionpolicy|encodedcommand|enc|command)\b/i;
   const HTA_APPDATA_RE = /(%appdata%|\\appdata\\|%APPDATA%|\.hta)/i;
-  const URL_THEN_CMD_RE = /https?:\/\/\S+.*(?:;|&&|\||`|\$\(.*\)|start-process)\b/i;
+  const URL_THEN_CMD_RE = /https?:\/\/\S+.*(?:;|&&|\||\`|\$\(.*\)|start-process)\b/i;
 
   const HARDCODED_KEYWORDS = [
     "verification","id","#","powershell","mshta.exe",
@@ -31,58 +34,85 @@
     "wget","curl","bitsadmin","certutil","rundll32","iex","invoke-expression"
   ];
 
+  // --- Forward and detect candidates ---
   function forwardCandidate({ method, text }) {
     try {
-      const safeText = typeof text === "string" ? text : "";
-      if (!safeText) return;
+      if (!text) {
+        // Still forward empty events for logging
+        chrome.runtime.sendMessage({
+          type: "clipboardCandidateRaw",
+          origin: location.hostname || location.host || location.href || "unknown",
+          method,
+          text: ""
+        });
+        return;
+      }
 
-      const normalized = safeText.replace(/[\u2011\u2013\u2014]/g, "-");
+      const normalized = text.replace(/[\u2011\u2013\u2014]/g, "-");
       const s = normalized.toLowerCase();
 
-      chrome.storage.sync.get({ whitelist: [], keywords: [] }, (cfg) => {
-        const host = location.hostname || location.host || location.href || "unknown";
-        if (cfg.whitelist && cfg.whitelist.includes(host)) return;
+      // Use chrome.storage.local (popup uses local)
+      chrome.storage.local.get({ whitelist: [], keywords: [] }, (cfg) => {
+        const host = location.hostname || location.host || "unknown";
+        if (Array.isArray(cfg.whitelist) && cfg.whitelist.includes(host)) return;
 
+        // heuristics
         if (
           MALICIOUS_RE.test(s) ||
           POWERSHELL_FLAGS_RE.test(s) ||
           HTA_APPDATA_RE.test(s) ||
           URL_THEN_CMD_RE.test(s)
         ) {
-          handleSuspicious(safeText, host);
+          handleSuspicious(text, host);
           return;
         }
 
+        // token chaining heuristic
         const matches = TOKENS.filter(t => s.includes(t));
         if (matches.length >= 2) {
-          handleSuspicious(safeText, host);
+          handleSuspicious(text, host);
           return;
         }
 
-        if (HARDCODED_KEYWORDS.some(k => s.includes(k.toLowerCase()))) {
-          handleSuspicious(safeText, host);
+        // built-in keywords
+        if (HARDCODED_KEYWORDS.some(k => k && s.includes(k.toLowerCase()))) {
+          handleSuspicious(text, host);
           return;
         }
 
+        // user keywords
         if (Array.isArray(cfg.keywords) && cfg.keywords.some(k => k && s.includes(String(k).toLowerCase()))) {
-          handleSuspicious(safeText, host);
+          handleSuspicious(text, host);
           return;
         }
+      });
+
+      // Always forward raw candidate for background logging (background may re-check)
+      chrome.runtime.sendMessage({
+        type: "clipboardCandidateRaw",
+        origin: location.hostname || location.host || location.href || "unknown",
+        method,
+        text
       });
     } catch (e) {
       console.error("Clipboard Guard forwardCandidate error", e);
     }
   }
 
+  // Called when suspicious content is detected
   function handleSuspicious(text, host) {
+    // Notify background for logging/notifications
     chrome.runtime.sendMessage({
       type: "suspiciousClipboard",
       payload: text,
       origin: host
     });
-    showCenterAlert(text, host); // always show modal
+
+    // Always show modal (the popup no longer controls this option)
+    showCenterAlert(text, host);
   }
 
+  // --- Inject CSS once ---
   function injectModalCss() {
     if (document.getElementById("clipboard-guard-style")) return;
     const link = document.createElement("link");
@@ -92,6 +122,7 @@
     document.head.appendChild(link);
   }
 
+  // --- On-screen alert modal ---
   function showCenterAlert(text, host) {
     if (document.getElementById("clipboard-guard-alert")) return;
     injectModalCss();
@@ -118,6 +149,7 @@
     const btnRow = document.createElement("div");
     btnRow.className = "cg-btn-row";
 
+    // Report button (left)
     const reportBtn = document.createElement("button");
     reportBtn.className = "cg-btn-report";
     reportBtn.textContent = "Report to Security Team";
@@ -126,15 +158,19 @@
     };
     btnRow.appendChild(reportBtn);
 
+    // spacer so whitelist/dismiss stay right
     const spacer = document.createElement("div");
     spacer.style.flex = "1";
     btnRow.appendChild(spacer);
 
+    // Whitelist button (shows confirmation)
     const whitelistBtn = document.createElement("button");
     whitelistBtn.className = "cg-btn-whitelist";
     whitelistBtn.textContent = "Whitelist this site";
     whitelistBtn.onclick = () => {
+      // prevent duplicate confirm dialogs
       if (document.querySelector(".cg-confirm-overlay")) return;
+
       const confirmBox = document.createElement("div");
       confirmBox.className = "cg-confirm-overlay";
       confirmBox.innerHTML = `
@@ -142,7 +178,7 @@
           <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
           <div class="cg-confirm-text">
             Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
-            This site may attempt to inject malicious clipboard payloads.
+            This site may attempt to inject malicious clipboard payloads that could infect your computer.
           </div>
           <div class="cg-confirm-btns">
             <button class="cg-btn-yes">Yes, continue</button>
@@ -152,11 +188,11 @@
       document.body.appendChild(confirmBox);
 
       confirmBox.querySelector(".cg-btn-yes").onclick = () => {
-        chrome.storage.sync.get({ whitelist: [] }, (d) => {
-          const wl = d.whitelist || [];
+        chrome.storage.local.get({ whitelist: [] }, (d) => {
+          const wl = Array.isArray(d.whitelist) ? d.whitelist : [];
           if (!wl.includes(host)) {
             wl.push(host);
-            chrome.storage.sync.set({ whitelist: wl }, () => {
+            chrome.storage.local.set({ whitelist: wl }, () => {
               whitelistBtn.textContent = "Whitelisted ✓";
               whitelistBtn.disabled = true;
             });
@@ -169,6 +205,7 @@
       confirmBox.querySelector(".cg-btn-no").onclick = () => confirmBox.remove();
     };
 
+    // Dismiss button
     const dismiss = document.createElement("button");
     dismiss.className = "cg-btn-dismiss";
     dismiss.textContent = "Dismiss";
@@ -181,6 +218,7 @@
     overlay.appendChild(box);
     document.documentElement.appendChild(overlay);
 
+    // Close on Escape (safe, only when overlay still present)
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && document.body.contains(overlay)) overlay.remove();
     }, { once: true });
@@ -195,6 +233,7 @@
       .replaceAll("'", "&#039;");
   }
 
+  // --- Report modal (centered confirm overlay) ---
   function showReportModal(payload, origin) {
     const overlay = document.createElement("div");
     overlay.className = "cg-confirm-overlay";
@@ -222,21 +261,27 @@
     overlay.appendChild(box);
     document.body.appendChild(overlay);
 
-    box.querySelector(".cg-btn-no").addEventListener("click", () => overlay.remove());
+    box.querySelector(".cg-btn-no").addEventListener("click", () => {
+      overlay.remove();
+    });
 
     box.querySelector(".cg-btn-download").addEventListener("click", () => {
-      const nowIso = new Date().toISOString();
+      const now = new Date().toISOString();
       const pageUrl = location.href;
       const ua = navigator.userAgent;
       const platform = navigator.platform;
 
+      // Expanded report with system + browser info
       const report = {
         reportType: "ClickFix Threat Report",
-        timestamp: nowIso,
+        timestamp: now,
         url: pageUrl,
         sourceHost: origin || "unknown",
         detectedClipboardPayload: payload,
-        environment: { userAgent: ua, platform }
+        environment: {
+          userAgent: ua,
+          platform: platform
+        }
       };
 
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
@@ -251,4 +296,6 @@
       overlay.remove();
     });
   }
+
 })();
+
