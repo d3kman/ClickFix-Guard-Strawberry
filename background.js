@@ -39,9 +39,15 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       if (whitelist.includes(host)) return;
 
       const newLog = {
-        text: msg.payload || "",
-        origin: host,
-        time: new Date().toISOString()
+        reportType: "ClickFix Threat Log",
+        time: new Date().toISOString(),
+        url: sender?.url || origin || "unknown",
+        sourceHost: host,
+        detectedClipboardPayload: msg.payload || "",
+        environment: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform
+        }
       };
 
       const logs = Array.isArray(data.logs) ? data.logs : [];
