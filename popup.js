@@ -8,7 +8,6 @@ function init() {
     document.getElementById("refresh").addEventListener("click", renderAll);
     document.getElementById("addWhitelistBtn").addEventListener("click", addWhitelist);
     document.getElementById("clearWhitelist").addEventListener("click", clearWhitelist);
-    document.getElementById("onScreenToggle").addEventListener("change", toggleOnScreen);
 
     renderAll();
 }
@@ -17,15 +16,11 @@ function renderAll() {
     chrome.storage.local.get({
         keywords: [],
         logs: [],
-        whitelist: [],
-        onScreenAlerts: true
+        whitelist: []
     }, (data) => {
         // keywords (user-defined only)
         const ta = document.getElementById("keywordsArea");
         ta.value = (data.keywords && data.keywords.length) ? data.keywords.join("\n") : "";
-
-        // on-screen toggle
-        document.getElementById("onScreenToggle").checked = !!data.onScreenAlerts;
 
         // logs
         const logsContainer = document.getElementById("logsContainer");
@@ -137,10 +132,6 @@ function clearWhitelist() {
     });
 }
 
-function toggleOnScreen(e) {
-    chrome.storage.local.set({ onScreenAlerts: !!e.target.checked });
-}
-
 // helpers
 function truncate(s, n) {
     if (!s) return "";
@@ -155,4 +146,3 @@ function escapeHtml(unsafe) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
-
