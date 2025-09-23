@@ -38,7 +38,6 @@
   function forwardCandidate({ method, text }) {
     try {
       if (!text) {
-        // Still forward empty events for logging
         chrome.runtime.sendMessage({
           type: "clipboardCandidateRaw",
           origin: location.hostname || location.host || location.href || "unknown",
@@ -51,12 +50,10 @@
       const normalized = text.replace(/[\u2011\u2013\u2014]/g, "-");
       const s = normalized.toLowerCase();
 
-      // Use chrome.storage.local (popup uses local)
       chrome.storage.local.get({ whitelist: [], keywords: [] }, (cfg) => {
         const host = location.hostname || location.host || "unknown";
         if (Array.isArray(cfg.whitelist) && cfg.whitelist.includes(host)) return;
 
-        // heuristics
         if (
           MALICIOUS_RE.test(s) ||
           POWERSHELL_FLAGS_RE.test(s) ||
@@ -67,27 +64,23 @@
           return;
         }
 
-        // token chaining heuristic
         const matches = TOKENS.filter(t => s.includes(t));
         if (matches.length >= 2) {
           handleSuspicious(text, host);
           return;
         }
 
-        // built-in keywords
         if (HARDCODED_KEYWORDS.some(k => k && s.includes(k.toLowerCase()))) {
           handleSuspicious(text, host);
           return;
         }
 
-        // user keywords
         if (Array.isArray(cfg.keywords) && cfg.keywords.some(k => k && s.includes(String(k).toLowerCase()))) {
           handleSuspicious(text, host);
           return;
         }
       });
 
-      // Always forward raw candidate for background logging (background may re-check)
       chrome.runtime.sendMessage({
         type: "clipboardCandidateRaw",
         origin: location.hostname || location.host || location.href || "unknown",
@@ -99,20 +92,15 @@
     }
   }
 
-  // Called when suspicious content is detected
   function handleSuspicious(text, host) {
-    // Notify background for logging/notifications
     chrome.runtime.sendMessage({
       type: "suspiciousClipboard",
       payload: text,
       origin: host
     });
-
-    // Always show modal (the popup no longer controls this option)
     showCenterAlert(text, host);
   }
 
-  // --- Inject CSS once ---
   function injectModalCss() {
     if (document.getElementById("clipboard-guard-style")) return;
     const link = document.createElement("link");
@@ -122,7 +110,6 @@
     document.head.appendChild(link);
   }
 
-  // --- On-screen alert modal ---
   function showCenterAlert(text, host) {
     if (document.getElementById("clipboard-guard-alert")) return;
     injectModalCss();
@@ -149,7 +136,6 @@
     const btnRow = document.createElement("div");
     btnRow.className = "cg-btn-row";
 
-    // Report button (left)
     const reportBtn = document.createElement("button");
     reportBtn.className = "cg-btn-report";
     reportBtn.textContent = "Report to Security Team";
@@ -158,17 +144,14 @@
     };
     btnRow.appendChild(reportBtn);
 
-    // spacer so whitelist/dismiss stay right
     const spacer = document.createElement("div");
     spacer.style.flex = "1";
     btnRow.appendChild(spacer);
 
-    // Whitelist button (shows confirmation)
     const whitelistBtn = document.createElement("button");
     whitelistBtn.className = "cg-btn-whitelist";
     whitelistBtn.textContent = "Whitelist this site";
     whitelistBtn.onclick = () => {
-      // prevent duplicate confirm dialogs
       if (document.querySelector(".cg-confirm-overlay")) return;
 
       const confirmBox = document.createElement("div");
@@ -205,7 +188,6 @@
       confirmBox.querySelector(".cg-btn-no").onclick = () => confirmBox.remove();
     };
 
-    // Dismiss button
     const dismiss = document.createElement("button");
     dismiss.className = "cg-btn-dismiss";
     dismiss.textContent = "Dismiss";
@@ -218,7 +200,6 @@
     overlay.appendChild(box);
     document.documentElement.appendChild(overlay);
 
-    // Close on Escape (safe, only when overlay still present)
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && document.body.contains(overlay)) overlay.remove();
     }, { once: true });
@@ -233,7 +214,6 @@
       .replaceAll("'", "&#039;");
   }
 
-  // --- Report modal (centered confirm overlay) ---
   function showReportModal(payload, origin) {
     const overlay = document.createElement("div");
     overlay.className = "cg-confirm-overlay";
@@ -266,31 +246,24 @@
     });
 
     box.querySelector(".cg-btn-download").addEventListener("click", () => {
-      const now = new Date().toISOString();
-      const pageUrl = location.href;
-      const ua = navigator.userAgent;
-      const platform = navigator.platform;
-
-      // Expanded report with system + browser info
       const report = {
         reportType: "ClickFix Threat Report",
-        timestamp: now,
-        url: pageUrl,
+        timeUTC: new Date().toISOString(),
+        timeLocal: new Date().toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" }),
+        url: location.href,
         sourceHost: origin || "unknown",
         detectedClipboardPayload: payload,
         environment: {
-          userAgent: ua,
-          platform: platform
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language
         }
       };
 
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-      const downloadUrl = URL.createObjectURL(blob);
-
       chrome.runtime.sendMessage({
         type: "downloadReport",
-        url: downloadUrl,
-        filename: "ClickFix-ThreatReport.json"
+        data: report,
+        filename: `ClickFix-ThreatReport-${Date.now()}.json`
       });
 
       overlay.remove();
@@ -298,4 +271,3 @@
   }
 
 })();
-
