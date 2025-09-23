@@ -1,55 +1,7 @@
 // background.js
-// Handles suspiciousClipboard messages, notifications, log storage and default settings.
-
-const MAPPING_WEBHOOK_KEY = "mappingWebhookUrl"; // set this in storage.sync for your webhook URL
-
-// helper: generate a random 12-character ID (alphanumeric, lowercase)
-function generateShortId(len = 12) {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const arr = new Uint8Array(len);
-  crypto.getRandomValues(arr);
-  let out = "";
-  for (let i = 0; i < len; i++) {
-    out += alphabet[arr[i] % alphabet.length];
-  }
-  return out;
-}
-
-// Format CET/CEST date/time for logs (Stockholm/Paris)
-function getCETTimeString() {
-  try {
-    const now = new Date();
-    return new Intl.DateTimeFormat("sv-SE", {
-      timeZone: "Europe/Stockholm",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    }).format(now);
-  } catch (e) {
-    return new Date().toISOString();
-  }
-}
-
-// Ensure instanceId always exists (run at startup, not only install)
-function ensureInstanceId() {
-  chrome.storage.sync.get(["instanceId"], (items) => {
-    if (!items.instanceId) {
-      const newId = generateShortId(12);
-      chrome.storage.sync.set({
-        instanceId: newId,
-        instanceCreated: new Date().toISOString()
-      }, () => {
-        collectIdentityAndPostMapping(newId);
-      });
-    }
-  });
-}
+// Handles suspiciousClipboard messages, notifications, log storage.
 
 chrome.runtime.onInstalled.addListener(() => {
-  // Ensure defaults in storage.sync
   chrome.storage.sync.get(null, (items) => {
     const defaults = {
       whitelist: [],
@@ -57,72 +9,16 @@ chrome.runtime.onInstalled.addListener(() => {
       keywords: []
     };
     const toSet = {};
-
     for (const k in defaults) {
       if (!(k in items)) toSet[k] = defaults[k];
     }
-
-    // also create instanceId if missing
-    if (!items.instanceId) {
-      const id = generateShortId(12);
-      toSet.instanceId = id;
-      toSet.instanceCreated = new Date().toISOString();
-    }
-
     if (Object.keys(toSet).length > 0) {
-      chrome.storage.sync.set(toSet, () => {
-        if (toSet.instanceId) collectIdentityAndPostMapping(toSet.instanceId);
-      });
-    } else {
-      // instanceId might already exist, still collect identity if missing
-      chrome.storage.sync.get(["instanceId", "userEmail"], (s) => {
-        if (s.instanceId && !s.userEmail) collectIdentityAndPostMapping(s.instanceId);
-      });
+      chrome.storage.sync.set(toSet);
     }
   });
 });
 
-// 🔹 ensure instanceId on every startup, not just install
-ensureInstanceId();
-
-// Collect identity (if available on managed Chrome) and optionally POST mapping
-function collectIdentityAndPostMapping(instanceId) {
-  try {
-    chrome.identity.getProfileUserInfo((info) => {
-      const email = info && info.email ? info.email : null;
-      const userId = info && info.id ? info.id : null;
-      chrome.storage.sync.set({ userEmail: email, userId: userId }, () => {
-        // If a mapping webhook is configured, POST the mapping (server should be internal and secure)
-        chrome.storage.sync.get([MAPPING_WEBHOOK_KEY], (r) => {
-          const url = r && r[MAPPING_WEBHOOK_KEY];
-          if (url) {
-            const payload = {
-              instanceId,
-              email,
-              userId,
-              timestamp: new Date().toISOString()
-            };
-            // POST mapping - best effort, do not block startup
-            fetch(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload)
-            }).then(res => {
-              if (!res.ok) console.warn("Mapping webhook returned non-OK:", res.status);
-            }).catch(err => {
-              console.error("Mapping webhook error:", err);
-            });
-          }
-        });
-      });
-    });
-  } catch (e) {
-    console.error("collectIdentityAndPostMapping error:", e);
-  }
-}
-
 chrome.runtime.onMessage.addListener((msg, sender) => {
-  // suspiciousClipboard from content script -> log + notify
   if (msg && msg.type === "suspiciousClipboard") {
     (async () => {
       let origin = msg.origin || (sender && sender.url) || "unknown";
@@ -134,25 +30,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         host = origin || "unknown";
       }
 
-      // read instanceId and store a richer log
-      chrome.storage.sync.get({ whitelist: [], logs: [], instanceId: null }, (data) => {
+      chrome.storage.sync.get({ whitelist: [], logs: [] }, (data) => {
         const whitelist = Array.isArray(data.whitelist) ? data.whitelist : [];
         if (whitelist.includes(host)) return;
 
-        const instanceId = data.instanceId || "unknown";
-        const now = getCETTimeString();
-
+        const now = new Date().toISOString();
         const newLog = {
           reportType: "ClickFix Threat Log",
           time: now,
           url: sender?.url || origin || "unknown",
           sourceHost: host,
-          detectedClipboardPayload: msg.payload || "",
-          instanceId,
-          environment: {
-            userAgent: navigator.userAgent,
-            platform: navigator.platform
-          }
+          detectedClipboardPayload: msg.payload || ""
         };
 
         const logs = Array.isArray(data.logs) ? data.logs : [];
@@ -173,30 +61,21 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     })();
   }
 
-  // downloadReport -> start download (URL will be a blob: URL created by content script)
   if (msg && msg.type === "downloadReport") {
     try {
       chrome.downloads.download({
         url: msg.url,
         filename: msg.filename || "ClickFix-ThreatReport.json",
         saveAs: true
-      }, (downloadId) => {
-        if (chrome.runtime.lastError) {
-          console.error("Download failed:", chrome.runtime.lastError.message);
-        } else {
-          console.log("Download started, ID:", downloadId);
-        }
       });
     } catch (e) {
-      console.error("Download initiation error:", e);
+      console.error("Download error:", e);
     }
   }
 });
 
-// small helper
 function truncate(s, n) {
   if (!s) return "";
   const str = String(s);
   return str.length > n ? str.slice(0, n - 1) + "…" : str;
 }
-
