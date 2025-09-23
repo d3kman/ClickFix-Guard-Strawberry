@@ -134,17 +134,39 @@
     whitelistBtn.className = "cg-btn-whitelist";
     whitelistBtn.textContent = "Whitelist this site";
     whitelistBtn.onclick = () => {
-      chrome.storage.sync.get({ whitelist: [] }, (d) => {
-        const wl = d.whitelist || [];
-        if (!wl.includes(host)) {
-          wl.push(host);
-          chrome.storage.sync.set({ whitelist: wl }, () => {
-            whitelistBtn.textContent = "Whitelisted ✓";
-            whitelistBtn.disabled = true;
-          });
-        }
-      });
-      overlay.remove();
+      if (document.querySelector(".cg-confirm-overlay")) return;
+      const confirmBox = document.createElement("div");
+      confirmBox.className = "cg-confirm-overlay";
+      confirmBox.innerHTML = `
+        <div class="cg-confirm-box">
+          <div class="cg-confirm-title">⚠️ Confirm Whitelisting</div>
+          <div class="cg-confirm-text">
+            Do you really want to whitelist <strong>${escapeHtml(host)}</strong>?<br>
+            This site may attempt to inject malicious clipboard payloads.
+          </div>
+          <div class="cg-confirm-btns">
+            <button class="cg-btn-yes">Yes, continue</button>
+            <button class="cg-btn-no">Cancel</button>
+          </div>
+        </div>`;
+      document.body.appendChild(confirmBox);
+
+      confirmBox.querySelector(".cg-btn-yes").onclick = () => {
+        chrome.storage.sync.get({ whitelist: [] }, (d) => {
+          const wl = d.whitelist || [];
+          if (!wl.includes(host)) {
+            wl.push(host);
+            chrome.storage.sync.set({ whitelist: wl }, () => {
+              whitelistBtn.textContent = "Whitelisted ✓";
+              whitelistBtn.disabled = true;
+            });
+          }
+        });
+        confirmBox.remove();
+        overlay.remove();
+      };
+
+      confirmBox.querySelector(".cg-btn-no").onclick = () => confirmBox.remove();
     };
 
     const dismiss = document.createElement("button");
@@ -226,4 +248,3 @@
     });
   }
 })();
-
