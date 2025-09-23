@@ -45,22 +45,21 @@ function renderAll() {
                 logsContainer.appendChild(div);
             });
 
-            // ✅ attach download button handlers
             logsContainer.querySelectorAll(".dlBtn").forEach(btn => {
-                btn.addEventListener("click", (e) => {
-                    const idx = e.target.getAttribute("data-index");
-                    chrome.storage.local.get({ logs: [] }, (d) => {
-                        const entry = d.logs[idx];
-                        if (entry) {
-                            chrome.runtime.sendMessage({
-                                type: "downloadReport",
-                                json: JSON.stringify(entry, null, 2),
-                                filename: `ClickFix-ThreatReport-${Date.now()}.json`
-                            });
-                        }
-                    });
-                });
-            });
+  btn.addEventListener("click", (e) => {
+    const idx = e.target.getAttribute("data-index");
+    chrome.storage.local.get({ logs: [] }, (d) => {
+      const entry = d.logs[idx];
+      if (entry) {
+        chrome.runtime.sendMessage({
+          type: "downloadReport",
+          data: entry,
+          filename: `ClickFix-ThreatReport-${Date.now()}.json`
+        });
+      }
+    });
+  });
+});
         }
 
         // whitelist
