@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ClickFix Clipboard Guard",
+  "name": "Strawberry ClickFix-Guard",
   "description": "Protects against clipboard hijacking attacks (ClickFix, malware payloads, and more).",
   "version": "1.3.3",
   "icons": {
