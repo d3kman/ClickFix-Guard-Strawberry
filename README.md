@@ -1,66 +1,110 @@
+🚨 ClickFix Clipboard Guard
 
-# 🚨 ClickFix Clipboard Guard
+ClickFix Clipboard Guard is a lightweight browser extension that protects you from clipboard hijacking attacks often used in ClickFix scams and other malware tricks.
 
-ClickFix Clipboard Guard is a lightweight browser extension that protects you from **clipboard hijacking attacks** often used in ClickFix scams and other malware tricks.
+These scams trick you with fake “verification” steps that tell you to open a terminal and paste something — while secretly copying malicious commands (like PowerShell or Bash payloads) into your clipboard. If you paste them, your system can be compromised in seconds.
 
-These scams make you click on fake “verification” checkboxes or buttons and secretly copy **malicious commands** (like PowerShell payloads) to your clipboard. If you paste them into a terminal, your system can be compromised.
+This extension monitors clipboard writes in real time and shouts at you 🚨 when something looks shady.
 
-This extension **monitors clipboard writes** in real time and alerts you when something looks suspicious.
+✨ Features
+🔎 Clipboard Monitoring
 
----
+Detects when any site tries to write to your clipboard.
 
-## ✨ Features
+Even sneaky, hidden, or background attempts are caught.
 
-### 🔎 Clipboard Monitoring  
-Detects when a site tries to write to your clipboard — even hidden or background attempts.
+⚠ Suspicious Content Detection
 
-### ⚠ Suspicious Content Detection  
-Built-in **hardcoded detection rules** catch high-risk payloads such as:  
+Built-in detection rules catch the nastiest stuff:
 
-- ClickFix-style bait text: `Verification`, `ID`, `#`  
-- PowerShell & flags: `powershell`, `-NoProfile`, `-ExecutionPolicy`, `-enc`, `Invoke-Expression`, `IEX`  
-- Windows LOLBins: `mshta.exe`, `certutil`, `rundll32`, `wget`, `curl`, etc.  
-- Dangerous chains: commands after a URL (e.g. `https://... && powershell`)  
+ClickFix bait → Verification, ID, #
 
-👉 These rules are **always enforced** and **cannot be removed** by the user.  
-You may add your **own extra keywords** via the popup settings.
+PowerShell & flags → powershell, -NoProfile, -ExecutionPolicy, -enc, Invoke-Expression, IEX
 
-### 📢 On-Screen Alerts  
-Shows a **centered warning modal** inside the webpage whenever suspicious clipboard activity is detected.  
-- Shows the source website  
-- Displays the exact suspicious payload  
-- Lets you **whitelist trusted sites** with one click  
+Windows LOLBins → mshta.exe, certutil, rundll32, wget, curl, bitsadmin
 
-### 🔔 System Notifications  
-Sends a browser desktop notification so you don’t miss important alerts.
+Command chaining → URLs followed by &&, ;, pipes, etc.
 
-### 📜 Activity Logs  
-Keeps the **last 50 suspicious attempts** for quick review in the extension popup.
+Mac/Linux hijacks → /bin/bash -c, curl -fsSL, curl spoofing as “Mac OS X”
 
-### ✅ Whitelist Trusted Sites  
-If a known safe site (like a web IDE or productivity tool) legitimately uses the clipboard, you can **whitelist it** to avoid alerts.
+👉 These rules are hardcoded and cannot be removed — because they cover the most abused real-world attacks.
 
-### 🛠️ User Custom Keywords  
-Add your own watchlist keywords in the popup (case-insensitive).  
-- Resetting keywords only clears your custom ones — built-in protections remain permanent.
+You can also add your own custom keywords in the popup settings (for company-specific or new emerging threats).
 
----
+📢 On-Screen Alerts
 
-## 📂 Installation
+When something sketchy is detected:
 
-1. Download or clone this repository.  
-2. Open **Chrome / Edge / Brave** and go to: `chrome://extensions/`  
-3. Enable **Developer mode** (toggle in the top-right).  
-4. Click **Load unpacked** and select the folder with the extension.  
-5. Done! 🎉 The extension is now active.
+A big centered warning modal appears on the page.
 
----
+You’ll see the source website + the exact clipboard payload.
 
-## 🔐 Why Use It?
+You can instantly:
 
-Clipboard hijacking is one of the simplest but most dangerous tricks in modern scams.  
+❌ Dismiss the alert
 
-Attackers rely on you **pasting** something into PowerShell, CMD, or a terminal without noticing.  
-ClickFix Clipboard Guard acts as an **intrusion alarm for your clipboard** 🚨 — giving you time to stop before executing something harmful.
+✅ Whitelist the site if it’s legit (e.g., a dev tool you trust)
 
----
+📤 Report to Security Team (shows clear instructions & lets you download a JSON report for emailing to IT/SecOps).
+
+📜 Activity Logs
+
+Keeps the last 50 suspicious attempts in the extension popup.
+
+Shows timestamp, origin site, and payload.
+
+You can download logs for investigation or share with security teams.
+
+✅ Whitelist Management
+
+One-click whitelist from alerts or manually add domains.
+
+Whitelisted sites won’t trigger alerts (good for trusted internal tools).
+
+You can clear the whitelist at any time from the popup settings if you change your mind.
+
+🛠️ User Custom Keywords
+
+Add your own watchlist keywords (case-insensitive).
+
+Great for company-specific patterns or things attackers are starting to abuse.
+
+Resetting keywords only clears your custom ones — built-in rules are permanent.
+
+🔔 System Notifications
+
+Also throws a desktop notification (in addition to the on-screen modal).
+
+Makes sure you don’t miss an alert even if the suspicious site hides it behind a fake captcha.
+
+📂 Installation
+
+Download or clone this repository.
+
+Open Chrome / Edge / Brave and go to: chrome://extensions/
+
+Enable Developer mode (toggle in the top-right).
+
+Click Load unpacked and select the folder with the extension.
+
+Done! 🎉 The extension is now active and watching your clipboard’s back.
+
+🔐 Why Use It?
+
+Clipboard hijacking is ridiculously simple for attackers — but devastating for you.
+They don’t need malware installed, just trick you into pasting a command you never meant to run.
+
+ClickFix Clipboard Guard acts like an intrusion alarm for your clipboard 🚨.
+It catches:
+
+Windows payloads (PowerShell, CMD, LOLBins)
+
+Mac/Linux payloads (/bin/bash -c, curl -fsSL)
+
+ClickFix-style scam scripts
+
+Any custom threats you define
+
+And gives you clear options: stop, whitelist, or report.
+
+No more blind copy-paste → 💥 ransomware.
